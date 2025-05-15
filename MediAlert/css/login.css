@@ -1,0 +1,28 @@
+body,
+html {
+    height: 100%;
+    margin: 0;
+}
+
+.login-left {
+    background: radial-gradient(circle at top left, rgba(200, 200, 200, 0.4), rgba(255, 255, 255, 0.7));
+    backdrop-filter: blur(8px);
+    padding: 3rem;
+    height: 100%;
+}
+
+.login-right {
+    background: url('../img/backgroundInicio.png') center center/cover no-repeat;
+    height: 100%;
+}
+
+.form-control {
+    border-radius: 20px;
+}
+
+.btn-login {
+    background-color: #2C70A2 !important;
+    color: #ffffff;
+    font-weight: bold;
+    border-radius: 20px;
+}

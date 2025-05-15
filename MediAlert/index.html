@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Panel Administrador - MediAlert</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.6/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+    <!-- Navbar -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container-fluid">
+            <a class="navbar-brand d-flex align-items-center" href="index.html">
+                <img src="img/logo4.png" alt="MediAlert" width="50rem" class="d-inline-block align-text-top me-2">
+                <span>MediAlert - Administrador</span>
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="login.html">Cerrar sesión</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Panel de acciones -->
+    <div class="container py-5">
+        <h2 class="mb-4 text-center">Panel de Administración</h2>
+        <div class="row g-4 justify-content-center">
+            <div class="col-12 col-md-4">
+                <div class="card shadow-sm">
+                    <div class="card-body text-center">
+                        <h5 class="card-title mb-3">Agregar Medicamento</h5>
+                        <p class="card-text">Registrar un nuevo medicamento en el sistema.</p>
+                        <a href="#" class="btn btn-primary w-100">Agregar Medicamento</a>
+                    </div>
+                </div>
+            </div>
+            <div class="col-12 col-md-4">
+                <div class="card shadow-sm">
+                    <div class="card-body text-center">
+                        <h5 class="card-title mb-3">Ver Medicamentos</h5>
+                        <p class="card-text">Consultar y administrar los medicamentos registrados.</p>
+                        <a href="#" class="btn btn-secondary w-100">Ver Medicamentos</a>
+                    </div>
+                </div>
+            </div>
+            <div class="col-12 col-md-4">
+                <div class="card shadow-sm">
+                    <div class="card-body text-center">
+                        <h5 class="card-title mb-3">Agregar Usuario</h5>
+                        <p class="card-text">Registrar un nuevo usuario (paciente, médico, etc.).</p>
+                        <a href="#" class="btn btn-success w-100">Agregar Usuario</a>
+                    </div>
+                </div>
+            </div>
+            <div class="col-12 col-md-4">
+                <div class="card shadow-sm">
+                    <div class="card-body text-center">
+                        <h5 class="card-title mb-3">Ver Usuarios</h5>
+                        <p class="card-text">Consultar y administrar los usuarios registrados.</p>
+                        <a href="#" class="btn btn-info w-100">Ver Usuarios</a>
+                    </div>
+                </div>
+            </div>
+            <div class="col-12 col-md-4">
+                <div class="card shadow-sm">
+                    <div class="card-body text-center">
+                        <h5 class="card-title mb-3">Reportes</h5>
+                        <p class="card-text">Generar y consultar reportes del sistema.</p>
+                        <a href="#" class="btn btn-warning w-100">Ver Reportes</a>
+                    </div>
+                </div>
+            </div>
+            <!-- Puedes agregar más tarjetas según las funciones necesarias -->
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.6/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
