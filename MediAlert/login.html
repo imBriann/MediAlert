@@ -41,6 +41,7 @@
                             <input type="password" class="form-control" id="contrasena" placeholder="Contraseña"
                                 required>
                         </div>
+                        <div id="loginError" class="alert alert-danger d-none" role="alert"></div>
                         <div class="mb-2 text-end">
                             <a href="#" class="text-muted" style="font-size: 0.9rem;">¿Ha olvidado su contraseña?</a>
                         </div>
@@ -63,9 +64,29 @@
         integrity="sha384-j1CDi7MgGQ12Z7Qab0qlWQ/Qqz24Gc6BM0thvEMVjHnfYGF0rmFCozFSxQBxwHKO"
         crossorigin="anonymous"></script>
     <script>
-        document.getElementById('loginForm').addEventListener('submit', function(e) {
+        document.getElementById('loginForm').addEventListener('submit', async function(e) {
             e.preventDefault();
-            window.location.href = 'index.html';
+            const cedula = document.getElementById('Cedula').value;
+            const contrasena = document.getElementById('contrasena').value;
+            const errorDiv = document.getElementById('loginError');
+            errorDiv.classList.add('d-none');
+            try {
+                const resp = await fetch('http://127.0.0.1:5000/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ cedula, contrasena })
+                });
+                if (resp.ok) {
+                    window.location.href = 'index.html';
+                } else {
+                    const data = await resp.json();
+                    errorDiv.textContent = data.message || 'Error de autenticación';
+                    errorDiv.classList.remove('d-none');
+                }
+            } catch (err) {
+                errorDiv.textContent = 'No se pudo conectar al servidor';
+                errorDiv.classList.remove('d-none');
+            }
         });
     </script>
 </body>
