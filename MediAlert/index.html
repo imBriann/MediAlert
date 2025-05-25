@@ -20,7 +20,7 @@
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav ms-auto">
                     <li class="nav-item">
-                        <a class="nav-link" href="login.html">Cerrar sesión</a>
+                        <a class="nav-link" href="#" id="logoutBtn">Cerrar sesión</a>
                     </li>
                 </ul>
             </div>
@@ -36,7 +36,7 @@
                     <div class="card-body text-center">
                         <h5 class="card-title mb-3">Agregar Medicamento</h5>
                         <p class="card-text">Registrar un nuevo medicamento en el sistema.</p>
-                        <a href="#" class="btn btn-primary w-100">Agregar Medicamento</a>
+                        <button class="btn btn-primary w-100" data-bs-toggle="modal" data-bs-target="#modalAgregarMedicamento">Agregar Medicamento</button>
                     </div>
                 </div>
             </div>
@@ -45,7 +45,7 @@
                     <div class="card-body text-center">
                         <h5 class="card-title mb-3">Ver Medicamentos</h5>
                         <p class="card-text">Consultar y administrar los medicamentos registrados.</p>
-                        <a href="#" class="btn btn-secondary w-100">Ver Medicamentos</a>
+                        <button class="btn btn-secondary w-100" data-bs-toggle="modal" data-bs-target="#modalVerMedicamentos">Ver Medicamentos</button>
                     </div>
                 </div>
             </div>
@@ -54,7 +54,7 @@
                     <div class="card-body text-center">
                         <h5 class="card-title mb-3">Agregar Usuario</h5>
                         <p class="card-text">Registrar un nuevo usuario (paciente, médico, etc.).</p>
-                        <a href="#" class="btn btn-success w-100">Agregar Usuario</a>
+                        <button class="btn btn-success w-100" data-bs-toggle="modal" data-bs-target="#modalAgregarUsuario">Agregar Usuario</button>
                     </div>
                 </div>
             </div>
@@ -63,7 +63,7 @@
                     <div class="card-body text-center">
                         <h5 class="card-title mb-3">Ver Usuarios</h5>
                         <p class="card-text">Consultar y administrar los usuarios registrados.</p>
-                        <a href="#" class="btn btn-info w-100">Ver Usuarios</a>
+                        <button class="btn btn-info w-100" data-bs-toggle="modal" data-bs-target="#modalVerUsuarios">Ver Usuarios</button>
                     </div>
                 </div>
             </div>
@@ -72,7 +72,7 @@
                     <div class="card-body text-center">
                         <h5 class="card-title mb-3">Reportes</h5>
                         <p class="card-text">Generar y consultar reportes del sistema.</p>
-                        <a href="#" class="btn btn-warning w-100">Ver Reportes</a>
+                        <button class="btn btn-warning w-100" data-bs-toggle="modal" data-bs-target="#modalReportes">Ver Reportes</button>
                     </div>
                 </div>
             </div>
@@ -80,6 +80,262 @@
         </div>
     </div>
 
+    <!-- Modal Agregar Medicamento -->
+    <div class="modal fade" id="modalAgregarMedicamento" tabindex="-1" aria-labelledby="modalAgregarMedicamentoLabel" aria-hidden="true">
+      <div class="modal-dialog">
+        <form class="modal-content" id="formMedicamento">
+          <div class="modal-header">
+            <h5 class="modal-title" id="modalAgregarMedicamentoLabel">Agregar Medicamento</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+          </div>
+          <div class="modal-body">
+            <div class="mb-2">
+              <label class="form-label">Nombre</label>
+              <input type="text" class="form-control" id="medNombre" required>
+            </div>
+            <div class="mb-2">
+              <label class="form-label">Descripción</label>
+              <input type="text" class="form-control" id="medDesc">
+            </div>
+            <div class="mb-2">
+              <label class="form-label">Composición</label>
+              <input type="text" class="form-control" id="medComposicion">
+            </div>
+            <div class="mb-2">
+              <label class="form-label">Síntomas secundarios</label>
+              <input type="text" class="form-control" id="medSintomas">
+            </div>
+            <div class="mb-2">
+              <label class="form-label">Indicaciones</label>
+              <input type="text" class="form-control" id="medIndicaciones">
+            </div>
+            <div class="mb-2">
+              <label class="form-label">Rango de edad permitido</label>
+              <input type="text" class="form-control" id="medEdad">
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="submit" class="btn btn-primary">Agregar</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Modal Ver Medicamentos -->
+    <div class="modal fade" id="modalVerMedicamentos" tabindex="-1" aria-labelledby="modalVerMedicamentosLabel" aria-hidden="true">
+      <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="modalVerMedicamentosLabel">Medicamentos Registrados</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+          </div>
+          <div class="modal-body">
+            <table class="table table-bordered" id="tablaMedicamentos">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Nombre</th>
+                  <th>Descripción</th>
+                  <th>Composición</th>
+                  <th>Síntomas secundarios</th>
+                  <th>Indicaciones</th>
+                  <th>Rango de edad</th>
+                  <th>Acciones</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal Agregar Usuario -->
+    <div class="modal fade" id="modalAgregarUsuario" tabindex="-1" aria-labelledby="modalAgregarUsuarioLabel" aria-hidden="true">
+      <div class="modal-dialog">
+        <form class="modal-content" id="formUsuario">
+          <div class="modal-header">
+            <h5 class="modal-title" id="modalAgregarUsuarioLabel">Agregar Usuario</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+          </div>
+          <div class="modal-body">
+            <div class="mb-2">
+              <label class="form-label">Cédula</label>
+              <input type="text" class="form-control" id="userCedula" required>
+            </div>
+            <div class="mb-2">
+              <label class="form-label">Contraseña</label>
+              <input type="password" class="form-control" id="userPass" required>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="submit" class="btn btn-success">Agregar</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Modal Ver Usuarios -->
+    <div class="modal fade" id="modalVerUsuarios" tabindex="-1" aria-labelledby="modalVerUsuariosLabel" aria-hidden="true">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="modalVerUsuariosLabel">Usuarios Registrados</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+          </div>
+          <div class="modal-body">
+            <table class="table table-bordered" id="tablaUsuarios">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Cédula</th>
+                  <th>Acciones</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal Reportes -->
+    <div class="modal fade" id="modalReportes" tabindex="-1" aria-labelledby="modalReportesLabel" aria-hidden="true">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="modalReportesLabel">Reportes</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+          </div>
+          <div class="modal-body">
+            <table class="table table-bordered" id="tablaReportes">
+              <thead>
+                <tr>
+                  <th>Fecha</th>
+                  <th>Acción</th>
+                  <th>Detalle</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.6/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Verifica si el usuario está logeado antes de mostrar el contenido
+        fetch('http://127.0.0.1:5000/check_login', {
+            credentials: 'include'
+        })
+        .then(resp => resp.json())
+        .then data => {
+            if (!data.logged_in) {
+                window.location.href = 'login.html';
+            }
+        })
+        .catch(() => {
+            window.location.href = 'login.html';
+        });
+
+        // Cerrar sesión
+        document.getElementById('logoutBtn').addEventListener('click', function(e) {
+            e.preventDefault();
+            fetch('http://127.0.0.1:5000/logout', {
+                method: 'POST',
+                credentials: 'include'
+            }).then(() => {
+                window.location.href = 'login.html';
+            });
+        });
+
+        // --- Medicamentos ---
+        function cargarMedicamentos() {
+            fetch('http://127.0.0.1:5000/medicamentos', {credentials: 'include'})
+            .then(r => r.json())
+            .then(data => {
+                const tbody = document.querySelector('#tablaMedicamentos tbody');
+                if (!tbody) return; // Evita error si el modal aún no está en el DOM
+                tbody.innerHTML = '';
+                data.forEach(m => {
+                    tbody.innerHTML += `<tr>
+                        <td>${m.id}</td>
+                        <td>${m.nombre}</td>
+                        <td>${m.descripcion || ''}</td>
+                        <td>${m.composicion || ''}</td>
+                        <td>${m.sintomas_secundarios || ''}</td>
+                        <td>${m.indicaciones || ''}</td>
+                        <td>${m.rango_edad || ''}</td>
+                        <td>
+                            <button class="btn btn-danger btn-sm" onclick="eliminarMedicamento(${m.id})">Eliminar</button>
+                        </td>
+                    </tr>`;
+                });
+            });
+        }
+        document.getElementById('modalVerMedicamentos').addEventListener('show.bs.modal', cargarMedicamentos);
+
+        // --- Usuarios ---
+        function cargarUsuarios() {
+            fetch('http://127.0.0.1:5000/usuarios', {credentials: 'include'})
+            .then(r => r.json())
+            .then(data => {
+                const tbody = document.querySelector('#tablaUsuarios tbody');
+                tbody.innerHTML = '';
+                data.forEach(u => {
+                    tbody.innerHTML += `<tr>
+                        <td>${u.id}</td>
+                        <td>${u.cedula}</td>
+                        <td>
+                            <button class="btn btn-danger btn-sm" onclick="eliminarUsuario(${u.id})">Eliminar</button>
+                        </td>
+                    </tr>`;
+                });
+            });
+        }
+        document.getElementById('formUsuario').onsubmit = function(e) {
+            e.preventDefault();
+            fetch('http://127.0.0.1:5000/usuarios', {
+                method: 'POST',
+                credentials: 'include',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    cedula: document.getElementById('userCedula').value,
+                    contrasena: document.getElementById('userPass').value
+                })
+            }).then(() => {
+                this.reset();
+                cargarUsuarios();
+                var modal = bootstrap.Modal.getInstance(document.getElementById('modalAgregarUsuario'));
+                modal.hide();
+            });
+        };
+        window.eliminarUsuario = function(id) {
+            fetch(`http://127.0.0.1:5000/usuarios/${id}`, {
+                method: 'DELETE',
+                credentials: 'include'
+            }).then(cargarUsuarios);
+        };
+        document.getElementById('modalVerUsuarios').addEventListener('show.bs.modal', cargarUsuarios);
+
+        // --- Reportes ---
+        function cargarReportes() {
+            fetch('http://127.0.0.1:5000/reportes', {credentials: 'include'})
+            .then(r => r.json())
+            .then(data => {
+                const tbody = document.querySelector('#tablaReportes tbody');
+                tbody.innerHTML = '';
+                data.forEach(rep => {
+                    tbody.innerHTML += `<tr>
+                        <td>${rep.fecha}</td>
+                        <td>${rep.accion}</td>
+                        <td>${rep.detalle}</td>
+                    </tr>`;
+                });
+            });
+        }
+        document.getElementById('modalReportes').addEventListener('show.bs.modal', cargarReportes);
+    </script>
 </body>
 </html>
