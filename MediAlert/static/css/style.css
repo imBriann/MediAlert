@@ -1,0 +1,17 @@
+.sidebar {
+    width: 280px;
+    height: 100vh;
+}
+
+.min-vh-100 {
+    min-height: 100vh;
+}
+
+.view-content {
+    display: none; /* Se mostrarán con JS */
+}
+
+/* Mostrar la primera vista por defecto en el panel de admin */
+#view-clientes {
+    display: block;
+}

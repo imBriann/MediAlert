@@ -1,80 +1,67 @@
 import psycopg2
 import os
 
-# Fuerza los valores explícitamente para descartar problemas de entorno
+# --- Configuración de la Conexión a la Base de Datos ---
 PG_HOST = 'localhost'
 PG_DB = 'medialert'
 PG_USER = 'postgres'
-PG_PASS = '0102'
+PG_PASS = '0102'  # ¡Usa tu contraseña real aquí!
 PG_PORT = '5432'
 
-def print_bytes(label, value):
-    print(f"{label}: {value} -> {list(value.encode('utf-8', errors='replace'))}")
+# --- Comandos SQL para crear la estructura de la base de datos ---
+SQL_COMMANDS = """
+-- Borra las tablas existentes para empezar de cero
+DROP TABLE IF EXISTS reportes, alertas, medicamentos, usuarios CASCADE;
 
-print("Conectando a PostgreSQL con:")
-print_bytes("  HOST", PG_HOST)
-print_bytes("  DB", PG_DB)
-print_bytes("  USER", PG_USER)
-print_bytes("  PASS", PG_PASS)
-print_bytes("  PORT", PG_PORT)
-
-try:
-    conn = psycopg2.connect(
-        host=PG_HOST,
-        database=PG_DB,
-        user=PG_USER,
-        password=PG_PASS,
-        port=PG_PORT
-    )
-    # Test: muestra el encoding real de la conexión y la base de datos
-    cur = conn.cursor()
-    cur.execute("SHOW server_encoding;")
-    print("server_encoding:", cur.fetchone())
-    cur.execute("SHOW client_encoding;")
-    print("client_encoding:", cur.fetchone())
-    cur.close()
-except Exception as e:
-    print("Error al conectar a PostgreSQL:")
-    print(e)
-    os._exit(1)
-
-conn.set_client_encoding('UTF8')
-cur = conn.cursor()
-cur.execute('''
-CREATE TABLE IF NOT EXISTS usuarios (
-    id SERIAL PRIMARY KEY,
-    cedula VARCHAR(50) UNIQUE NOT NULL,
-    contrasena VARCHAR(255) NOT NULL
-)
-''')
-# Usuario de prueba: cedula=123456, contrasena=admin
-cur.execute("INSERT INTO usuarios (cedula, contrasena) VALUES (%s, %s) ON CONFLICT (cedula) DO NOTHING", ('123456', 'admin'))
-
-cur.execute('''
-CREATE TABLE IF NOT EXISTS medicamentos (
+-- Tabla de Usuarios con roles, nombre y email
+CREATE TABLE usuarios (
     id SERIAL PRIMARY KEY,
     nombre VARCHAR(100) NOT NULL,
+    cedula VARCHAR(20) UNIQUE NOT NULL,
+    email VARCHAR(100) UNIQUE NOT NULL,
+    contrasena VARCHAR(255) NOT NULL,
+    rol VARCHAR(10) NOT NULL CHECK (rol IN ('admin', 'cliente'))
+);
+
+-- Tabla de Medicamentos con la restricción UNIQUE en el nombre
+CREATE TABLE medicamentos (
+    id SERIAL PRIMARY KEY,
+    nombre VARCHAR(100) UNIQUE NOT NULL, -- <-- ¡AQUÍ ESTÁ LA CORRECCIÓN! AÑADIMOS UNIQUE.
     descripcion TEXT,
     composicion TEXT,
     sintomas_secundarios TEXT,
     indicaciones TEXT,
     rango_edad VARCHAR(50)
-)
-''')
+);
 
-# Asegura que la tabla tenga las columnas nuevas (solo si ya existía antes sin ellas)
-cur.execute("SELECT column_name FROM information_schema.columns WHERE table_name='medicamentos'")
-cols = [row[0] for row in cur.fetchall()]
-if 'composicion' not in cols:
-    cur.execute("ALTER TABLE medicamentos ADD COLUMN composicion TEXT")
-if 'sintomas_secundarios' not in cols:
-    cur.execute("ALTER TABLE medicamentos ADD COLUMN sintomas_secundarios TEXT")
-if 'indicaciones' not in cols:
-    cur.execute("ALTER TABLE medicamentos ADD COLUMN indicaciones TEXT")
-if 'rango_edad' not in cols:
-    cur.execute("ALTER TABLE medicamentos ADD COLUMN rango_edad VARCHAR(50)")
+-- Tabla de Alertas: Conecta un usuario con un medicamento
+CREATE TABLE alertas (
+    id SERIAL PRIMARY KEY,
+    usuario_id INT NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+    medicamento_id INT NOT NULL REFERENCES medicamentos(id) ON DELETE CASCADE,
+    dosis VARCHAR(100),
+    frecuencia VARCHAR(100),
+    fecha_inicio DATE NOT NULL,
+    fecha_fin DATE,
+    estado VARCHAR(20) DEFAULT 'activa'
+);
 
-# Lista de 100 medicamentos reales
+-- Tabla de Reportes/Auditoría con referencia al usuario que realizó la acción
+CREATE TABLE reportes (
+    id SERIAL PRIMARY KEY,
+    fecha TIMESTAMPTZ DEFAULT NOW(),
+    accion VARCHAR(255),
+    detalle TEXT,
+    realizado_por INT REFERENCES usuarios(id)
+);
+
+-- Insertar un usuario administrador y un cliente de prueba para poder hacer login
+INSERT INTO usuarios (nombre, cedula, email, contrasena, rol) VALUES
+('Admin General', 'admin', 'admin@medialert.com', 'admin123', 'admin'),
+('Juan Perez', '12345', 'juan.perez@email.com', 'cliente123', 'cliente');
+"""
+
+# --- Tu lista completa de 100 medicamentos ---
 medicamentos = [
     {"nombre": "Paracetamol 500 mg",    "descripcion": "Analgésico y antipirético.",                      "composicion": "Paracetamol 500 mg",                        "sintomas_secundarios": "náuseas, hepatotoxicidad en sobredosis", "indicaciones": "fiebre, dolor leve a moderado", "rango_edad": "Todas las edades"},
     {"nombre": "Ibuprofeno 400 mg",     "descripcion": "Antiinflamatorio no esteroideo.",                  "composicion": "Ibuprofeno 400 mg",                         "sintomas_secundarios": "gastritis, dolor abdominal",                  "indicaciones": "dolor, inflamación, fiebre", "rango_edad": "Mayores de 6 meses"},
@@ -148,30 +135,47 @@ medicamentos = [
     # … sigue completando hasta 100…
 ]
 
-# Inserción de todos los registros
-for med in medicamentos:
-    cur.execute('''
-        INSERT INTO medicamentos (nombre, descripcion, composicion, sintomas_secundarios, indicaciones, rango_edad)
-        VALUES (%s, %s, %s, %s, %s, %s)
-    ''', (
-        med["nombre"],
-        med["descripcion"],
-        med["composicion"],
-        med["sintomas_secundarios"],
-        med["indicaciones"],
-        med.get("rango_edad", "")
-    ))
-conn.commit()
 
-cur.execute('''
-CREATE TABLE IF NOT EXISTS reportes (
-    id SERIAL PRIMARY KEY,
-    fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    accion TEXT NOT NULL,
-    detalle TEXT
-)
-''')
+def inicializar_db():
+    """Conecta a la base de datos, borra las tablas viejas, crea las nuevas e inserta los datos iniciales."""
+    conn = None
+    try:
+        print("Conectando a la base de datos PostgreSQL...")
+        conn = psycopg2.connect(
+            host=PG_HOST,
+            database=PG_DB,
+            user=PG_USER,
+            password=PG_PASS,
+            port=PG_PORT
+        )
+        conn.set_client_encoding('UTF8')
+        cur = conn.cursor()
 
-cur.close()
-conn.close()
-print(f"Base de datos PostgreSQL inicializada con usuario de prueba.")
+        print("Creando la estructura de tablas...")
+        cur.execute(SQL_COMMANDS)
+        print("Estructura de tablas creada con éxito.")
+
+        print(f"Insertando {len(medicamentos)} medicamentos en la base de datos...")
+        for med in medicamentos:
+            cur.execute("""
+                INSERT INTO medicamentos (nombre, descripcion, composicion, sintomas_secundarios, indicaciones, rango_edad)
+                VALUES (%(nombre)s, %(descripcion)s, %(composicion)s, %(sintomas_secundarios)s, %(indicaciones)s, %(rango_edad)s)
+                ON CONFLICT (nombre) DO NOTHING;
+            """, med)
+        print("Medicamentos insertados con éxito.")
+
+        conn.commit()
+        
+        print("\n¡Base de datos inicializada correctamente!")
+        print("Se crearon un usuario 'admin' y un usuario 'cliente' de prueba.")
+
+    except psycopg2.Error as e:
+        print("\nOcurrió un error al inicializar la base de datos:")
+        print(e)
+    finally:
+        if conn is not None:
+            conn.close()
+            print("Conexión a la base de datos cerrada.")
+
+if __name__ == '__main__':
+    inicializar_db()
