@@ -3,6 +3,7 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 from flask_cors import CORS
 from functools import wraps
+import json
 
 app = Flask(__name__, static_url_path='/static', static_folder='static', template_folder='templates')
 CORS(app, supports_credentials=True)
@@ -37,6 +38,30 @@ def admin_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
+# --- Función de Auditoría ---
+def registrar_auditoria(accion, tabla_afectada=None, registro_id=None, detalles=None):
+    """Registra una acción en la tabla de auditoría."""
+    admin_id = session.get('user_id')
+    if not admin_id:
+        return # No registrar si no hay un admin en la sesión
+
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute(
+            """
+            INSERT INTO auditoria (usuario_id, accion, tabla_afectada, registro_id, detalles)
+            VALUES (%s, %s, %s, %s, %s)
+            """,
+            (admin_id, accion, tabla_afectada, registro_id, json.dumps(detalles) if detalles else None)
+        )
+        conn.commit()
+    except Exception as e:
+        print(f"Error al registrar auditoría: {e}")
+    finally:
+        cur.close()
+        conn.close()
+
 # --- Rutas de Autenticación y Sesión ---
 @app.route('/api/login', methods=['POST'])
 def login():
@@ -55,6 +80,7 @@ def login():
         session['user_id'] = user['id']
         session['nombre'] = user['nombre']
         session['rol'] = user['rol']
+        registrar_auditoria('INICIO_SESION', detalles={'usuario': user['nombre']})
         return jsonify(user)
     
     return jsonify({'error': 'Credenciales inválidas'}), 401
@@ -62,6 +88,7 @@ def login():
 @app.route('/api/logout', methods=['POST'])
 @login_required
 def logout():
+    registrar_auditoria('CIERRE_SESION', detalles={'usuario': session.get('nombre')})
     session.clear()
     return jsonify({'message': 'Cierre de sesión exitoso'})
 
@@ -74,14 +101,13 @@ def session_check():
         'rol': session.get('rol')
     })
 
-# --- Rutas de la API para Administradores ---
-
+# --- API: GESTIÓN DE CLIENTES ---
 @app.route('/api/admin/clientes', methods=['GET', 'POST'])
 @admin_required
 def manage_clientes():
-    # Esta ruta ya está implementada
     conn = get_db_connection()
     cur = conn.cursor(cursor_factory=RealDictCursor)
+    
     if request.method == 'GET':
         cur.execute("SELECT id, nombre, cedula, email FROM usuarios WHERE rol='cliente' ORDER BY nombre")
         clientes = cur.fetchall()
@@ -91,113 +117,171 @@ def manage_clientes():
 
     if request.method == 'POST':
         data = request.json
-        cur.execute("INSERT INTO usuarios (nombre, cedula, email, contrasena, rol) VALUES (%s, %s, %s, %s, 'cliente') RETURNING id",
-                    (data['nombre'], data['cedula'], data['email'], data['contrasena']))
-        new_id = cur.fetchone()['id']
-        conn.commit()
-        # Aquí registrarías la auditoría
-        cur.close()
-        conn.close()
-        return jsonify({'message': 'Cliente creado', 'id': new_id}), 201
+        try:
+            cur.execute(
+                "INSERT INTO usuarios (nombre, cedula, email, contrasena, rol) VALUES (%s, %s, %s, %s, 'cliente') RETURNING id",
+                (data['nombre'], data['cedula'], data['email'], data['contrasena'])
+            )
+            new_id = cur.fetchone()['id']
+            conn.commit()
+            registrar_auditoria('CREAR_CLIENTE', 'usuarios', new_id, data)
+            return jsonify({'message': 'Cliente creado', 'id': new_id}), 201
+        except Exception as e:
+            conn.rollback()
+            return jsonify({'error': str(e)}), 500
+        finally:
+            cur.close()
+            conn.close()
 
-
-@app.route('/api/admin/clientes/<int:uid>', methods=['PUT', 'DELETE'])
+@app.route('/api/admin/clientes/<int:uid>', methods=['GET', 'PUT', 'DELETE'])
 @admin_required
 def manage_single_cliente(uid):
-    # Esta ruta ya está implementada
-    conn = get_db_connection()
-    cur = conn.cursor()
-    if request.method == 'PUT':
-        data = request.json
-        cur.execute("UPDATE usuarios SET nombre=%s, cedula=%s, email=%s WHERE id=%s AND rol='cliente'",
-                    (data['nombre'], data['cedula'], data['email'], uid))
-        conn.commit()
-        cur.close()
-        conn.close()
-        return jsonify({'message': 'Cliente actualizado'})
-
-    if request.method == 'DELETE':
-        cur.execute("DELETE FROM usuarios WHERE id=%s AND rol='cliente'", (uid,))
-        conn.commit()
-        cur.close()
-        conn.close()
-        return jsonify({'message': 'Cliente eliminado'})
-
-# --- ¡NUEVAS RUTAS AÑADIDAS PARA EVITAR EL ERROR! ---
-
-@app.route('/api/admin/medicamentos', methods=['GET'])
-@admin_required
-def get_medicamentos():
     conn = get_db_connection()
     cur = conn.cursor(cursor_factory=RealDictCursor)
-    cur.execute("SELECT * FROM medicamentos ORDER BY nombre")
-    medicamentos = cur.fetchall()
-    cur.close()
-    conn.close()
-    return jsonify(medicamentos)
 
+    if request.method == 'GET':
+        cur.execute("SELECT id, nombre, cedula, email FROM usuarios WHERE id = %s AND rol='cliente'", (uid,))
+        cliente = cur.fetchone()
+        cur.close()
+        conn.close()
+        return jsonify(cliente)
+        
+    if request.method == 'PUT':
+        data = request.json
+        try:
+            cur.execute(
+                "UPDATE usuarios SET nombre=%s, cedula=%s, email=%s WHERE id=%s AND rol='cliente'",
+                (data['nombre'], data['cedula'], data['email'], uid)
+            )
+            conn.commit()
+            registrar_auditoria('EDITAR_CLIENTE', 'usuarios', uid, data)
+            return jsonify({'message': 'Cliente actualizado'})
+        except Exception as e:
+            conn.rollback()
+            return jsonify({'error': str(e)}), 500
+        finally:
+            cur.close()
+            conn.close()
+
+    if request.method == 'DELETE':
+        try:
+            cur.execute("DELETE FROM usuarios WHERE id=%s AND rol='cliente'", (uid,))
+            conn.commit()
+            registrar_auditoria('ELIMINAR_CLIENTE', 'usuarios', uid)
+            return jsonify({'message': 'Cliente eliminado'})
+        except Exception as e:
+            conn.rollback()
+            return jsonify({'error': str(e)}), 500
+        finally:
+            cur.close()
+            conn.close()
+
+# --- API: GESTIÓN DE MEDICAMENTOS ---
+@app.route('/api/admin/medicamentos', methods=['GET', 'POST'])
+@admin_required
+def manage_medicamentos():
+    conn = get_db_connection()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    
+    if request.method == 'GET':
+        cur.execute("SELECT * FROM medicamentos ORDER BY nombre")
+        medicamentos = cur.fetchall()
+        cur.close()
+        conn.close()
+        return jsonify(medicamentos)
+    
+    if request.method == 'POST':
+        data = request.json
+        try:
+            cur.execute(
+                "INSERT INTO medicamentos (nombre, descripcion) VALUES (%s, %s) RETURNING id",
+                (data['nombre'], data['descripcion'])
+            )
+            new_id = cur.fetchone()['id']
+            conn.commit()
+            registrar_auditoria('CREAR_MEDICAMENTO', 'medicamentos', new_id, data)
+            return jsonify({'message': 'Medicamento creado', 'id': new_id}), 201
+        except Exception as e:
+            conn.rollback()
+            return jsonify({'error': str(e)}), 500
+        finally:
+            cur.close()
+            conn.close()
+
+@app.route('/api/admin/medicamentos/<int:mid>', methods=['PUT', 'DELETE'])
+@admin_required
+def manage_single_medicamento(mid):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    if request.method == 'PUT':
+        data = request.json
+        try:
+            cur.execute(
+                "UPDATE medicamentos SET nombre=%s, descripcion=%s WHERE id=%s",
+                (data['nombre'], data['descripcion'], mid)
+            )
+            conn.commit()
+            registrar_auditoria('EDITAR_MEDICAMENTO', 'medicamentos', mid, data)
+            return jsonify({'message': 'Medicamento actualizado'})
+        except Exception as e:
+            conn.rollback()
+            return jsonify({'error': str(e)}), 500
+        finally:
+            cur.close()
+            conn.close()
+
+    if request.method == 'DELETE':
+        try:
+            # Primero, elimina las alertas asociadas para evitar errores de clave foránea
+            cur.execute("DELETE FROM alertas WHERE medicamento_id=%s", (mid,))
+            cur.execute("DELETE FROM medicamentos WHERE id=%s", (mid,))
+            conn.commit()
+            registrar_auditoria('ELIMINAR_MEDICAMENTO', 'medicamentos', mid)
+            return jsonify({'message': 'Medicamento y sus alertas asociadas eliminados'})
+        except Exception as e:
+            conn.rollback()
+            return jsonify({'error': str(e)}), 500
+        finally:
+            cur.close()
+            conn.close()
+
+# --- API: GESTIÓN DE ALERTAS ---
 @app.route('/api/admin/alertas', methods=['GET'])
 @admin_required
 def get_alertas():
-    # Por ahora, devolvemos una lista vacía para que no de error
-    return jsonify([])
-
-@app.route('/api/admin/auditoria', methods=['GET'])
-@admin_required
-def get_auditoria():
-    # Por ahora, devolvemos una lista vacía para que no de error
-    return jsonify([])
-
-# ... (todo tu código anterior de app.py va aquí) ...
-
-# --- ¡NUEVO ENDPOINT PARA CONFIGURACIÓN! ---
-@app.route('/api/admin/perfil/password', methods=['PUT'])
-@admin_required
-def update_admin_password():
-    """Permite al admin logueado cambiar su propia contraseña."""
-    data = request.json
-    new_password = data.get('contrasena')
-
-    if not new_password:
-        return jsonify({'error': 'No se proporcionó una nueva contraseña'}), 400
-
-    admin_id = session['user_id']
-    
-    conn = get_db_connection()
-    cur = conn.cursor()
-    try:
-        cur.execute("UPDATE usuarios SET contrasena = %s WHERE id = %s", (new_password, admin_id))
-        conn.commit()
-    except Exception as e:
-        conn.rollback()
-        return jsonify({'error': str(e)}), 500
-    finally:
-        cur.close()
-        conn.close()
-
-    return jsonify({'message': 'Contraseña actualizada con éxito'})
-
-# ... (El resto de tu código de app.py va aquí) ...
-
-
-# --- Rutas de la API para Clientes ---
-
-@app.route('/api/cliente/mis_alertas', methods=['GET'])
-@login_required
-def get_mis_alertas():
-    user_id = session['user_id']
     conn = get_db_connection()
     cur = conn.cursor(cursor_factory=RealDictCursor)
     cur.execute("""
-        SELECT a.id, m.nombre as medicamento, a.dosis, a.frecuencia, a.estado
+        SELECT a.id, u.nombre as cliente_nombre, m.nombre as medicamento_nombre, a.dosis, a.frecuencia, a.estado
         FROM alertas a
+        JOIN usuarios u ON a.usuario_id = u.id
         JOIN medicamentos m ON a.medicamento_id = m.id
-        WHERE a.usuario_id = %s
-    """, (user_id,))
+        ORDER BY u.nombre, m.nombre
+    """)
     alertas = cur.fetchall()
     cur.close()
     conn.close()
     return jsonify(alertas)
+# (Las rutas POST, PUT, DELETE para alertas seguirían una lógica similar)
+
+
+# --- API: AUDITORÍA ---
+@app.route('/api/admin/auditoria', methods=['GET'])
+@admin_required
+def get_auditoria():
+    conn = get_db_connection()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    cur.execute("""
+        SELECT a.id, u.nombre as admin_nombre, a.accion, a.tabla_afectada, a.registro_id, a.detalles, a.fecha_hora
+        FROM auditoria a
+        JOIN usuarios u ON a.usuario_id = u.id
+        ORDER BY a.fecha_hora DESC
+    """)
+    logs = cur.fetchall()
+    cur.close()
+    conn.close()
+    return jsonify(logs)
 
 
 # --- Rutas para servir los archivos HTML ---
@@ -207,6 +291,7 @@ def index():
 
 @app.route('/<path:path>')
 def serve_static(path):
+    # Simplificado para el ejemplo, asume que si no es login, es un archivo que requiere sesión
     if path in ['admin.html', 'client.html'] and 'user_id' not in session:
         return render_template('login.html')
     return render_template(path)

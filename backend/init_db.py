@@ -11,7 +11,7 @@ PG_PORT = '5432'
 # --- Comandos SQL para crear la estructura de la base de datos ---
 SQL_COMMANDS = """
 -- Borra las tablas existentes para empezar de cero
-DROP TABLE IF EXISTS reportes, alertas, medicamentos, usuarios CASCADE;
+DROP TABLE IF EXISTS reportes, alertas, medicamentos, usuarios, auditoria CASCADE;
 
 -- Tabla de Usuarios con roles, nombre y email
 CREATE TABLE usuarios (
@@ -53,6 +53,17 @@ CREATE TABLE reportes (
     accion VARCHAR(255),
     detalle TEXT,
     realizado_por INT REFERENCES usuarios(id)
+);
+
+-- Tabla de Auditoría para registrar acciones en el sistema
+CREATE TABLE auditoria (
+    id SERIAL PRIMARY KEY,
+    usuario_id INTEGER REFERENCES usuarios(id),
+    accion VARCHAR(255) NOT NULL,
+    tabla_afectada VARCHAR(50),
+    registro_id INTEGER,
+    detalles TEXT,
+    fecha_hora TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Insertar un usuario administrador y un cliente de prueba para poder hacer login

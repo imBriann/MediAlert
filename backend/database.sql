@@ -42,13 +42,3 @@ CREATE TABLE reportes (
     detalle TEXT,
     realizado_por INT REFERENCES usuarios(id) -- Quién hizo el cambio
 );
-
--- Insertar un usuario administrador y un cliente de prueba
-INSERT INTO usuarios (nombre, cedula, email, contrasena, rol) VALUES
-('Admin General', 'admin', 'admin@medialert.com', 'admin123', 'admin'),
-('Juan Perez', '12345', 'juan.perez@email.com', 'cliente123', 'cliente');
-
--- Insertar medicamentos de prueba
-INSERT INTO medicamentos (nombre, descripcion) VALUES
-('Ibuprofeno 600mg', 'Analgésico y antiinflamatorio'),
-('Paracetamol 500mg', 'Analgésico y antipirético');
