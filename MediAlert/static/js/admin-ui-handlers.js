@@ -77,3 +77,56 @@ function openMedicamentoModal(id = null, data = {}) {
         console.error("medicamentoModal no está disponible o no tiene el método show.");
     }
 }
+
+async function openAlertaModal(alertaId = null) { // alertaId para futura edición
+    const form = document.getElementById('alertaForm');
+    form.reset();
+    document.getElementById('alertaId').value = ''; 
+
+    const modalTitle = document.getElementById('alertaModalLabel');
+    const usuarioSelect = document.getElementById('alertaUsuario');
+    const medicamentoSelect = document.getElementById('alertaMedicamento');
+
+    modalTitle.textContent = 'Asignar Nueva Alerta';
+    // Limpiar selectores manteniendo la opción por defecto
+    usuarioSelect.innerHTML = '<option value="" disabled selected>Seleccione un cliente...</option>';
+    medicamentoSelect.innerHTML = '<option value="" disabled selected>Seleccione un medicamento...</option>';
+
+    try {
+        // Cargar Clientes
+        const clientesResponse = await fetch('/api/admin/clientes');
+        if (!clientesResponse.ok) throw new Error('No se pudieron cargar los clientes.');
+        const clientes = await clientesResponse.json();
+        clientes.forEach(cliente => {
+            const option = new Option(`${cliente.nombre} (C.C: ${cliente.cedula})`, cliente.id);
+            usuarioSelect.add(option);
+        });
+
+        // Cargar Medicamentos
+        const medicamentosResponse = await fetch('/api/admin/medicamentos');
+        if (!medicamentosResponse.ok) throw new Error('No se pudieron cargar los medicamentos.');
+        const medicamentos = await medicamentosResponse.json();
+        medicamentos.forEach(medicamento => {
+            const option = new Option(medicamento.nombre, medicamento.id);
+            medicamentoSelect.add(option);
+        });
+
+        if (alertaId) {
+            // Lógica para cargar datos de una alerta existente para editar (FUTURO)
+            // modalTitle.textContent = 'Editar Alerta';
+            // const alertDataResponse = await fetch(`/api/admin/alertas/${alertaId}`);
+            // const alertData = await alertDataResponse.json();
+            // Llenar campos del formulario...
+        }
+
+        if (window.alertaModal && typeof window.alertaModal.show === 'function') {
+            window.alertaModal.show();
+        } else {
+            console.error("La instancia del modal 'alertaModal' no está disponible.");
+        }
+
+    } catch (error) {
+        console.error("Error al preparar el modal de alerta:", error);
+        alert(`Error al cargar datos para el formulario de alerta: ${error.message}`);
+    }
+}

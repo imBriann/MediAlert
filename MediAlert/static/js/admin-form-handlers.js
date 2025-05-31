@@ -64,3 +64,49 @@ async function handleMedicamentoSubmit(e) {
         alert(`Error al guardar medicamento: ${error.message}`);
     }
 }
+
+async function handleAlertaSubmit(e) {
+    e.preventDefault();
+    const alertaId = document.getElementById('alertaId').value; // Para futura edición
+
+    const method = alertaId ? 'PUT' : 'POST';
+    const url = alertaId ? `/api/admin/alertas/${alertaId}` : '/api/admin/alertas';
+
+    const fechaFinValue = document.getElementById('alertaFechaFin').value;
+
+    const body = {
+        usuario_id: document.getElementById('alertaUsuario').value,
+        medicamento_id: document.getElementById('alertaMedicamento').value,
+        dosis: document.getElementById('alertaDosis').value.trim(),
+        frecuencia: document.getElementById('alertaFrecuencia').value.trim(),
+        fecha_inicio: document.getElementById('alertaFechaInicio').value,
+        fecha_fin: fechaFinValue ? fechaFinValue : null, // Enviar null si está vacío
+    };
+
+    if (!body.usuario_id || !body.medicamento_id || !body.fecha_inicio) {
+        alert('Por favor, complete todos los campos obligatorios (Cliente, Medicamento, Fecha de Inicio).');
+        return;
+    }
+
+    try {
+        const response = await fetch(url, {
+            method: method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+
+        const responseData = await response.json(); // Siempre intentar parsear JSON
+
+        if (!response.ok) {
+            throw new Error(responseData.error || `Error (${response.status}) al guardar la alerta.`);
+        }
+
+        if (window.alertaModal) window.alertaModal.hide();
+        if (typeof loadAlertas === 'function') loadAlertas();
+        alert(responseData.message || 'Alerta guardada con éxito.');
+
+    } catch (error) {
+        console.error('Error al enviar formulario de alerta:', error);
+        alert(`Error: ${error.message}`);
+    }
+}
