@@ -40,27 +40,46 @@ def admin_required(f):
 
 # --- Función de Auditoría ---
 def registrar_auditoria(accion, tabla_afectada=None, registro_id=None, detalles=None):
-    """Registra una acción en la tabla de auditoría."""
+    """Registra una acción en la tabla de auditoría llamando a una función de PostgreSQL."""
     admin_id = session.get('user_id')
     if not admin_id:
-        return # No registrar si no hay un admin en la sesión
+        # Si no hay user_id en la sesión, no se registra.
+        # Podrías añadir un log aquí si quieres rastrear intentos de auditoría sin sesión.
+        # print("Auditoría no registrada: user_id no encontrado en la sesión.")
+        return
 
+    conn = None
+    cur = None
     try:
         conn = get_db_connection()
         cur = conn.cursor()
+        
+        # Convierte el diccionario de detalles a una cadena JSON si existe
+        detalles_json = json.dumps(detalles) if detalles else None
+
+        # Llama a la función de PostgreSQL sp_registrar_auditoria
+        # psycopg2 puede llamar funciones que devuelven VOID usando SELECT
         cur.execute(
-            """
-            INSERT INTO auditoria (usuario_id, accion, tabla_afectada, registro_id, detalles)
-            VALUES (%s, %s, %s, %s, %s)
-            """,
-            (admin_id, accion, tabla_afectada, registro_id, json.dumps(detalles) if detalles else None)
+            "SELECT sp_registrar_auditoria(%s, %s, %s, %s, %s);",
+            (admin_id, accion, tabla_afectada, registro_id, detalles_json)
         )
+        # Alternativamente, podrías usar cur.callproc si prefieres esa sintaxis:
+        # cur.callproc("sp_registrar_auditoria", (admin_id, accion, tabla_afectada, registro_id, detalles_json))
+        
         conn.commit()
+    except psycopg2.Error as e:
+        print(f"Error de base de datos al registrar auditoría vía SP: {e}")
+        if conn:
+            conn.rollback() # Importante hacer rollback en caso de error
     except Exception as e:
-        print(f"Error al registrar auditoría: {e}")
+        print(f"Error general al registrar auditoría vía SP: {e}")
+        if conn: # Asegurar rollback también para errores no específicos de psycopg2
+            conn.rollback()
     finally:
-        cur.close()
-        conn.close()
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
 
 # --- Rutas de Autenticación y Sesión ---
 @app.route('/api/login', methods=['POST'])

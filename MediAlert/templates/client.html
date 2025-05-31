@@ -15,8 +15,7 @@
             <div class="d-flex align-items-center">
                 <span class="navbar-text me-3">Bienvenido, <strong id="client-name">Cargando...</strong></span>
                 <button class="btn btn-outline-secondary me-2" id="theme-toggler" type="button">
-                    <i class="bi bi-moon-stars-fill"></i>
-                </button>
+                    <i class="bi bi-moon-stars-fill"></i> </button>
                 <button class="btn btn-danger" id="logout-btn-client">Cerrar Sesión</button>
             </div>
         </div>
@@ -31,55 +30,8 @@
     </main>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-<script src="{{ url_for('static', filename='js/theme.js') }}"></script>
-<script>
-    // JS específico para el cliente
-    document.addEventListener('DOMContentLoaded', async () => {
-        try {
-            const response = await fetch('/api/session_check');
-            const data = await response.json();
-            if (!response.ok || data.rol !== 'cliente') {
-                window.location.href = '/login.html';
-                return;
-            }
-            document.getElementById('client-name').textContent = data.nombre;
-        } catch (e) {
-            window.location.href = '/login.html';
-        }
+<script src="{{ url_for('static', filename='js/theme.js') }}"></script> 
+<script src="{{ url_for('static', filename='js/client.js') }}"></script>
 
-        // Cargar sus alertas
-        const alertResponse = await fetch('/api/cliente/mis_alertas');
-        const alertas = await alertResponse.json();
-        const tableBody = document.getElementById('alertas-table-body');
-        tableBody.innerHTML = '';
-        if(alertas.length > 0) {
-            alertas.forEach(a => {
-                tableBody.innerHTML += `<tr>
-                    <td>${a.medicamento}</td>
-                    <td>${a.dosis || 'N/A'}</td>
-                    <td>${a.frecuencia || 'N/A'}</td>
-                    <td><span class="badge bg-success">${a.estado}</span></td>
-                </tr>`;
-            });
-        } else {
-            tableBody.innerHTML = '<tr><td colspan="4" class="text-center">No tienes alertas asignadas.</td></tr>';
-        }
-
-        // Logout
-        document.getElementById('logout-btn-client').addEventListener('click', async () => {
-            try {
-                const response = await fetch('/api/logout', { method: 'POST' });
-                if (response.ok) {
-                    window.location.href = '/login.html';  // Redirige al login si el cierre de sesión es exitoso
-                } else {
-                    const errorData = await response.json();
-                    alert(`Error al cerrar sesión: ${errorData.error}`);
-                }
-            } catch (e) {
-                alert('Error de conexión al cerrar sesión.');
-            }
-        });
-    });
-</script>
 </body>
 </html>
