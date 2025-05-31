@@ -88,9 +88,12 @@ def login():
 @app.route('/api/logout', methods=['POST'])
 @login_required
 def logout():
-    registrar_auditoria('CIERRE_SESION', detalles={'usuario': session.get('nombre')})
-    session.clear()
-    return jsonify({'message': 'Cierre de sesión exitoso'})
+    try:
+        registrar_auditoria('CIERRE_SESION', detalles={'usuario': session.get('nombre')})
+        session.clear()  # Limpia la sesión
+        return jsonify({'message': 'Cierre de sesión exitoso'}), 200
+    except Exception as e:
+        return jsonify({'error': 'Error al cerrar sesión', 'details': str(e)}), 500
 
 @app.route('/api/session_check', methods=['GET'])
 @login_required
@@ -289,12 +292,19 @@ def get_auditoria():
 def index():
     return render_template('login.html')
 
+@app.route('/favicon.ico')
+def favicon():
+    return '', 204  # Responde con un estado 204 (sin contenido) para evitar errores.
+
 @app.route('/<path:path>')
 def serve_static(path):
-    # Simplificado para el ejemplo, asume que si no es login, es un archivo que requiere sesión
-    if path in ['admin.html', 'client.html'] and 'user_id' not in session:
-        return render_template('login.html')
-    return render_template(path)
+    # Si el archivo solicitado no existe, devuelve un error 404.
+    try:
+        if path in ['admin.html', 'client.html'] and 'user_id' not in session:
+            return render_template('login.html')
+        return render_template(path)
+    except Exception:
+        return "Archivo no encontrado", 404
 
 
 if __name__ == '__main__':

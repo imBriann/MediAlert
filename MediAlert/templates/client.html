@@ -67,8 +67,17 @@
 
         // Logout
         document.getElementById('logout-btn-client').addEventListener('click', async () => {
-            await fetch('/api/logout', { method: 'POST' });
-            window.location.href = '/login.html';
+            try {
+                const response = await fetch('/api/logout', { method: 'POST' });
+                if (response.ok) {
+                    window.location.href = '/login.html';  // Redirige al login si el cierre de sesión es exitoso
+                } else {
+                    const errorData = await response.json();
+                    alert(`Error al cerrar sesión: ${errorData.error}`);
+                }
+            } catch (e) {
+                alert('Error de conexión al cerrar sesión.');
+            }
         });
     });
 </script>
