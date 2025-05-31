@@ -46,11 +46,8 @@ def registrar_auditoria(accion, tabla_afectada=None, registro_id=None, detalles=
     """Registra una acción en la tabla de auditoría llamando a una función de PostgreSQL."""
     admin_id = session.get('user_id')
     if not admin_id:
-        # Si no hay user_id en la sesión, no se registra.
-        # Podrías añadir un log aquí si quieres rastrear intentos de auditoría sin sesión.
-        # print("Auditoría no registrada: user_id no encontrado en la sesión.")
+        print("Auditoría no registrada: user_id no encontrado en la sesión.")
         return
-
     conn = None
     cur = None
     try:
@@ -60,23 +57,19 @@ def registrar_auditoria(accion, tabla_afectada=None, registro_id=None, detalles=
         # Convierte el diccionario de detalles a una cadena JSON si existe
         detalles_json = json.dumps(detalles) if detalles else None
 
-        # Llama a la función de PostgreSQL sp_registrar_auditoria
-        # psycopg2 puede llamar funciones que devuelven VOID usando SELECT
         cur.execute(
             "SELECT sp_registrar_auditoria(%s, %s, %s, %s, %s);",
             (admin_id, accion, tabla_afectada, registro_id, detalles_json)
         )
-        # Alternativamente, podrías usar cur.callproc si prefieres esa sintaxis:
-        # cur.callproc("sp_registrar_auditoria", (admin_id, accion, tabla_afectada, registro_id, detalles_json))
         
         conn.commit()
     except psycopg2.Error as e:
         print(f"Error de base de datos al registrar auditoría vía SP: {e}")
         if conn:
-            conn.rollback() # Importante hacer rollback en caso de error
+            conn.rollback()
     except Exception as e:
         print(f"Error general al registrar auditoría vía SP: {e}")
-        if conn: # Asegurar rollback también para errores no específicos de psycopg2
+        if conn:
             conn.rollback()
     finally:
         if cur:
@@ -478,7 +471,7 @@ def update_alerta_admin(alerta_id):
 @app.route('/api/admin/alertas/<int:alerta_id>', methods=['DELETE'])
 @admin_required
 def delete_alerta_admin(alerta_id):
-    """Elimina una alerta específica."""
+    # Elimina una alerta específica
     conn = None
     cur = None
     try:
@@ -526,7 +519,7 @@ def delete_alerta_admin(alerta_id):
 @app.route('/api/admin/auditoria', methods=['GET'])
 @admin_required
 def get_auditoria():
-    """Devuelve el registro de auditoría para los administradores."""
+    # Devuelve el registro de auditoría para los administradores.
     conn = get_db_connection()
     cur = conn.cursor(cursor_factory=RealDictCursor)
     cur.execute("""

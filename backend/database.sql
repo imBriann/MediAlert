@@ -31,7 +31,7 @@ CREATE TABLE alertas (
     frecuencia VARCHAR(100),
     fecha_inicio DATE NOT NULL,
     fecha_fin DATE,
-    estado VARCHAR(20) DEFAULT 'activa' -- 'activa', 'inactiva', 'completada'
+    estado VARCHAR(20) DEFAULT 'activa'
 );
 
 -- Tabla de Reportes/Auditoría
@@ -40,5 +40,20 @@ CREATE TABLE reportes (
     fecha TIMESTAMPTZ DEFAULT NOW(),
     accion VARCHAR(255),
     detalle TEXT,
-    realizado_por INT REFERENCES usuarios(id) -- Quién hizo el cambio
+    realizado_por INT REFERENCES usuarios(id)
 );
+
+-- Función de PostgreSQL para registrar en la auditoría
+CREATE OR REPLACE FUNCTION sp_registrar_auditoria(
+    p_usuario_id INTEGER,
+    p_accion VARCHAR(255),
+    p_tabla_afectada VARCHAR(50),
+    p_registro_id INTEGER,
+    p_detalles TEXT
+)
+RETURNS VOID AS $$
+BEGIN
+    INSERT INTO auditoria (usuario_id, accion, tabla_afectada, registro_id, detalles, fecha_hora)
+    VALUES (p_usuario_id, p_accion, p_tabla_afectada, p_registro_id, p_detalles, CURRENT_TIMESTAMP);
+END;
+$$ LANGUAGE plpgsql;
