@@ -27,7 +27,7 @@ function renderErrorRow(tableBody, colspan, error) {
 function formatDate(dateString) {
     if (!dateString) return 'N/A';
     try {
-        return new Date(dateString).toLocaleDateString();
+        return new Date(dateString).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
     } catch (e) {
         return dateString; // Return original if parsing fails
     }
@@ -40,6 +40,7 @@ function formatTime(timeString) {
     if (hours && minutes) {
         const d = new Date();
         d.setHours(parseInt(hours, 10), parseInt(minutes, 10), 0);
+        // Format to HH:MM AM/PM
         return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
     }
     return timeString;
@@ -161,17 +162,121 @@ async function loadAlertas() {
     }
 }
 
-function formatJsonForDisplay(jsonData) {
+// --- Funciones para la Vista de Auditoría ---
+
+function getFriendlyTableName(tableName) {
+    if (!tableName) return 'N/A';
+    switch (tableName.toLowerCase()) {
+        case 'usuarios': return 'Usuarios/Clientes';
+        case 'medicamentos': return 'Medicamentos';
+        case 'alertas': return 'Alertas';
+        case 'auditoria': return 'Auditoría'; // For events logged directly to audit without a specific table
+        default: 
+            // Heuristic for system-generated audit actions that might not have a table_afectada
+            if (tableName.includes('_SESION') || tableName.includes('_LOGIN')) return 'Sesión';
+            return tableName.charAt(0).toUpperCase() + tableName.slice(1);
+    }
+}
+
+function formatAuditValue(value) {
+    if (value === null || typeof value === 'undefined') return '<em>N/A</em>';
+    if (typeof value === 'boolean') return value ? 'Sí' : 'No';
+    if (typeof value === 'string' && (value.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/) || value.match(/^\d{4}-\d{2}-\d{2}$/))) { // ISO Date or DateTime
+        try {
+            return new Date(value).toLocaleString();
+        } catch (e) { /* ignore */ }
+    }
+    if (typeof value === 'object') return `<pre class="mb-0 small">${JSON.stringify(value, null, 2)}</pre>`;
+    return value.toString();
+}
+
+
+function generateChangeSummary(accion, datosAnteriores, datosNuevos) {
+    let pDatosAnteriores = datosAnteriores, pDatosNuevos = datosNuevos;
+    if (typeof datosAnteriores === 'string') {
+        try { pDatosAnteriores = JSON.parse(datosAnteriores); } catch (e) { /* ignore parse error if already object or not json */ }
+    }
+    if (typeof datosNuevos === 'string') {
+        try { pDatosNuevos = JSON.parse(datosNuevos); } catch (e) { /* ignore parse error if already object or not json */ }
+    }
+
+    let summary = '<ul class="list-unstyled mb-0 small">';
+    let changesFound = false;
+    const excludedKeys = ['contrasena', 'hashed_password', 'contrasena_nueva', 'updated_at', 'created_at', 'last_login', 'usuario_id_app'];
+
+    if (accion && (accion.toUpperCase().includes('CREACI') || accion.toUpperCase().includes('INSERT') || accion.toUpperCase().includes('NUEVO'))) {
+        summary += '<li><strong>Registro Creado:</strong></li>';
+        if (pDatosNuevos && typeof pDatosNuevos === 'object') {
+            for (const key in pDatosNuevos) {
+                if (pDatosNuevos.hasOwnProperty(key) && !excludedKeys.includes(key.toLowerCase())) {
+                    summary += `<li><strong>${key}:</strong> ${formatAuditValue(pDatosNuevos[key])}</li>`;
+                    changesFound = true;
+                }
+            }
+        }
+    } else if (accion && (accion.toUpperCase().includes('ELIMINA') || accion.toUpperCase().includes('DELETE') || accion.toUpperCase().includes('BORRADO'))) {
+        summary += '<li><strong>Registro Eliminado. Datos Anteriores:</strong></li>';
+        if (pDatosAnteriores && typeof pDatosAnteriores === 'object') {
+             for (const key in pDatosAnteriores) {
+                if (pDatosAnteriores.hasOwnProperty(key) && !excludedKeys.includes(key.toLowerCase())) {
+                    summary += `<li><strong>${key}:</strong> ${formatAuditValue(pDatosAnteriores[key])}</li>`;
+                    changesFound = true;
+                }
+            }
+        }
+    } else if (pDatosNuevos && typeof pDatosNuevos === 'object' && pDatosAnteriores && typeof pDatosAnteriores === 'object') {
+        summary += '<li><strong>Cambios Detectados:</strong></li>';
+        const allKeys = new Set([...Object.keys(pDatosAnteriores), ...Object.keys(pDatosNuevos)]);
+        allKeys.forEach(key => {
+            if (excludedKeys.includes(key.toLowerCase())) return;
+
+            const oldValue = pDatosAnteriores[key];
+            const newValue = pDatosNuevos[key];
+
+            if (JSON.stringify(oldValue) !== JSON.stringify(newValue)) {
+                summary += `<li><strong>${key}:</strong> 
+                            <span class="text-danger" style="text-decoration: line-through;">${formatAuditValue(oldValue)}</span> &rarr; 
+                            <span class="text-success">${formatAuditValue(newValue)}</span></li>`;
+                changesFound = true;
+            }
+        });
+    } else if (pDatosNuevos && typeof pDatosNuevos === 'object') { // Fallback if only new data is present for an update-like action
+        summary += '<li><strong>Datos Actualizados:</strong></li>';
+        for (const key in pDatosNuevos) {
+            if (pDatosNuevos.hasOwnProperty(key) && !excludedKeys.includes(key.toLowerCase())) {
+                summary += `<li><strong>${key}:</strong> ${formatAuditValue(pDatosNuevos[key])}</li>`;
+                changesFound = true;
+            }
+        }
+    }
+
+
+    if (!changesFound) {
+        if (accion && (accion.toUpperCase().includes('SESION') || accion.toUpperCase().includes('LOGIN'))) {
+             summary += `<li><small>Evento de ${accion.toLowerCase().replace(/_/g, ' ')}.</small></li>`;
+        } else {
+            summary += '<li><small>No se detectaron cambios de datos o son eventos generales.</small></li>';
+        }
+    }
+    summary += '</ul>';
+    return summary;
+}
+
+
+function formatJsonForDisplay(jsonData) { // For "Detalles Adicionales"
     if (jsonData === null || typeof jsonData === 'undefined') return 'N/A';
     if (typeof jsonData === 'string') {
-        try { jsonData = JSON.parse(jsonData); } catch (e) { return jsonData; }
+        try { jsonData = JSON.parse(jsonData); } catch (e) { return `<small>${jsonData}</small>`; }
     }
     if (typeof jsonData === 'object') {
-        return Object.entries(jsonData)
-            .map(([key, value]) => `${key}: ${value}`)
-            .join('; ') || 'Vacío';
+        let content = '<ul class="list-unstyled mb-0 small">';
+        for(const [key, value] of Object.entries(jsonData)) {
+            content += `<li><strong>${key}:</strong> ${formatAuditValue(value)}</li>`;
+        }
+        content += '</ul>';
+        return content;
     }
-    return String(jsonData);
+    return `<small>${String(jsonData)}</small>`;
 }
 
 
@@ -187,30 +292,70 @@ async function loadAuditoria(filter = '') {
         tableBody.innerHTML = ''; 
 
         if (!logs || logs.length === 0) {
-            tableBody.innerHTML = '<tr><td colspan="9" class="text-center">No hay registros de auditoría.</td></tr>';
+            tableBody.innerHTML = '<tr><td colspan="7" class="text-center">No hay registros de auditoría disponibles para este filtro.</td></tr>';
             return;
         }
 
         logs.forEach((log, index) => {
             const row = tableBody.insertRow();
-            row.className = index % 2 === 0 ? 'table-light' : 'table-secondary';
-            row.insertCell().textContent = log.fecha_hora ? new Date(log.fecha_hora).toLocaleString() : 'N/A';
-            row.insertCell().textContent = log.nombre_usuario_app || 'Sistema';
-            row.insertCell().textContent = log.usuario_postgres || 'N/A';
-            row.insertCell().textContent = log.accion || 'N/A';
-            row.insertCell().textContent = log.tabla_afectada || 'N/A';
-            row.insertCell().textContent = log.registro_id_afectado !== null ? log.registro_id_afectado : 'N/A';
-            
-            const datosAnterioresCell = row.insertCell();
-            datosAnterioresCell.innerHTML = `<small>${formatJsonForDisplay(log.datos_anteriores)}</small>`;
-            
-            const datosNuevosCell = row.insertCell();
-            datosNuevosCell.innerHTML = `<small>${formatJsonForDisplay(log.datos_nuevos)}</small>`;
+            // row.className = index % 2 === 0 ? 'table-light' : 'table-secondary'; // Bootstrap default hover is often enough
 
+            row.insertCell().innerHTML = `<small>${log.fecha_hora ? new Date(log.fecha_hora).toLocaleString() : 'N/A'}</small>`;
+            row.insertCell().innerHTML = `<small>${log.nombre_usuario_app || 'Sistema'}</small>`;
+            row.insertCell().innerHTML = `<small>${log.accion ? log.accion.replace(/_/g, ' ') : 'N/A'}</small>`;
+            row.insertCell().innerHTML = `<small>${getFriendlyTableName(log.tabla_afectada)}</small>`;
+            row.insertCell().innerHTML = `<small>${log.registro_id_afectado !== null ? log.registro_id_afectado : 'N/A'}</small>`;
+            
+            const cambiosCell = row.insertCell();
+            cambiosCell.innerHTML = generateChangeSummary(log.accion, log.datos_anteriores, log.datos_nuevos);
+            
             const detallesAdicionalesCell = row.insertCell();
-            detallesAdicionalesCell.innerHTML = `<small>${formatJsonForDisplay(log.detalles_adicionales)}</small>`;
+            detallesAdicionalesCell.innerHTML = formatJsonForDisplay(log.detalles_adicionales);
         });
     } catch (error) {
-        renderErrorRow(tableBody, 9, error);
+        renderErrorRow(tableBody, 7, error); // Updated colspan to 7
     }
 }
+
+// ... (fetchData y otras funciones existentes) ...
+
+async function loadReportesLog() {
+    const tableBody = document.getElementById('reportes-log-table-body');
+    if (!tableBody) {
+        console.warn("Elemento 'reportes-log-table-body' no encontrado en la vista actual.");
+        return;
+    }
+
+    try {
+        const logs = await fetchData('/api/admin/reportes_log', 'Error al cargar historial de reportes'); //
+        tableBody.innerHTML = '';
+
+        if (!logs || logs.length === 0) {
+            tableBody.innerHTML = '<tr><td colspan="5" class="text-center">No hay reportes generados en el historial.</td></tr>';
+            return;
+        }
+
+        logs.forEach(log => {
+            const row = tableBody.insertRow();
+            row.insertCell().textContent = new Date(log.fecha_generacion).toLocaleString();
+            row.insertCell().textContent = log.nombre_reporte || 'N/A';
+            // tipo_reporte might be more technical, nombre_reporte is user-friendly
+            row.insertCell().textContent = log.tipo_reporte ? log.tipo_reporte.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) : 'N/A';
+            row.insertCell().textContent = log.generado_por_nombre || 'Desconocido';
+            
+            const actionsCell = row.insertCell();
+            const downloadButton = document.createElement('a'); // Changed to <a> for direct link
+            downloadButton.className = 'btn btn-sm btn-outline-primary bi bi-cloud-download'; // Changed icon
+            downloadButton.title = 'Descargar Reporte Almacenado';
+            downloadButton.href = `/api/admin/reportes/download/${log.id}`; // Link to the download endpoint
+            // downloadButton.target = '_blank'; // Optional: open in new tab if browser doesn't force download
+            
+            actionsCell.appendChild(downloadButton);
+        });
+
+    } catch (error) {
+        renderErrorRow(tableBody, 5, error); //
+    }
+}
+
+// ... (resto de funciones) ...

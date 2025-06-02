@@ -1,5 +1,4 @@
 // static/js/admin-ui-handlers.js
-
 function showView(viewId) {
     document.querySelectorAll('.view-content').forEach(view => view.style.display = 'none');
     const currentView = document.getElementById(viewId);
@@ -17,6 +16,7 @@ function showView(viewId) {
         case 'view-medicamentos': if(typeof loadMedicamentos === 'function') loadMedicamentos(); break;
         case 'view-alertas': if(typeof loadAlertas === 'function') loadAlertas(); break;
         case 'view-auditoria': if(typeof loadAuditoria === 'function') loadAuditoria(); break;
+        case 'view-reportes': if(typeof loadReportesLog === 'function') loadReportesLog(); break; // NUEVO
     }
 }
 

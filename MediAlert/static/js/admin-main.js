@@ -41,18 +41,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Delegación de Eventos Principal ---
     document.body.addEventListener('click', async (e) => {
-        const button = e.target.closest('button, a'); 
-        if (!button) return;
+        const targetElement = e.target.closest('button, a, div.report-option-card'); // Incluir las cards de reporte
+        if (!targetElement) return;
 
         // Navegación Sidebar
-        if (button.matches('.sidebar .nav-link')) {
+        if (targetElement.matches('.sidebar .nav-link')) {
             e.preventDefault();
-            const viewId = button.dataset.view;
+            const viewId = targetElement.dataset.view;
             if (viewId && typeof showView === 'function') showView(viewId);
         }
 
         // Cierre de Sesión y Tema
-        if (button.matches('#logout-btn')) {
+        if (targetElement.matches('#logout-btn')) {
             e.preventDefault();
             try {
                 await fetch('/api/logout', { method: 'POST' });
@@ -62,7 +62,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 alert("Error al cerrar sesión.");
             }
         }
-        if (button.matches('#theme-toggler-admin')) { // Específico para admin si es necesario, o usa el global de theme.js
+        if (targetElement.matches('#theme-toggler-admin')) { // Específico para admin si es necesario, o usa el global de theme.js
              // theme.js maneja el cambio de tema globalmente.
              // Si este botón tiene lógica específica adicional, agrégala aquí.
              // De lo contrario, asegúrate que theme.js esté funcionando.
@@ -70,18 +70,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
         // Botones "Agregar"
-        if (button.matches('#btn-add-cliente') && typeof openClienteModal === 'function') openClienteModal();
-        if (button.matches('#btn-add-medicamento') && typeof openMedicamentoModal === 'function') openMedicamentoModal();
-        if (button.matches('#btn-add-alerta') && typeof openAlertaModal === 'function') openAlertaModal();
+        if (targetElement.matches('#btn-add-cliente') && typeof openClienteModal === 'function') openClienteModal();
+        if (targetElement.matches('#btn-add-medicamento') && typeof openMedicamentoModal === 'function') openMedicamentoModal();
+        if (targetElement.matches('#btn-add-alerta') && typeof openAlertaModal === 'function') openAlertaModal();
 
         // Botones de Acción en Tablas (Clientes)
-        if (button.matches('.btn-edit-cliente') && typeof openClienteModal === 'function') {
-            openClienteModal(button.dataset.id);
+        if (targetElement.matches('.btn-edit-cliente') && typeof openClienteModal === 'function') {
+            openClienteModal(targetElement.dataset.id);
         }
-        if (button.matches('.btn-delete-cliente')) { // Ahora es Desactivar/Reactivar
-            const id = button.dataset.id;
-            const nombre = button.dataset.nombre || 'este cliente';
-            const currentStatus = button.querySelector('i.bi').classList.contains('bi-person-slash') ? 'activo' : 'inactivo';
+        if (targetElement.matches('.btn-delete-cliente')) { // Ahora es Desactivar/Reactivar
+            const id = targetElement.dataset.id;
+            const nombre = targetElement.dataset.nombre || 'este cliente';
+            const currentStatus = targetElement.querySelector('i.bi').classList.contains('bi-person-slash') ? 'activo' : 'inactivo';
             const newStatus = currentStatus === 'activo' ? 'inactivo' : 'activo';
             const actionText = newStatus === 'inactivo' ? 'desactivar' : 'reactivar';
 
@@ -104,13 +104,13 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         // Botones de Acción en Tablas (Medicamentos)
-        if (button.matches('.btn-edit-medicamento') && typeof openMedicamentoModal === 'function') {
-            openMedicamentoModal(button.dataset.id);
+        if (targetElement.matches('.btn-edit-medicamento') && typeof openMedicamentoModal === 'function') {
+            openMedicamentoModal(targetElement.dataset.id);
         }
-        if (button.matches('.btn-delete-medicamento')) { // Ahora es Discontinuar/Reactivar
-            const id = button.dataset.id;
-            const medNombre = button.dataset.nombre || 'este medicamento';
-            const currentStatusIcon = button.querySelector('i.bi');
+        if (targetElement.matches('.btn-delete-medicamento')) { // Ahora es Discontinuar/Reactivar
+            const id = targetElement.dataset.id;
+            const medNombre = targetElement.dataset.nombre || 'este medicamento';
+            const currentStatusIcon = targetElement.querySelector('i.bi');
             const currentStatus = currentStatusIcon && currentStatusIcon.classList.contains('bi-capsule-pill') ? 'disponible' : 'discontinuado';
             const newStatus = currentStatus === 'disponible' ? 'discontinuado' : 'disponible';
             const actionText = newStatus === 'discontinuado' ? 'discontinuar' : 'reactivar';
@@ -135,12 +135,12 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         // Botones de Acción en Tablas (Alertas)
-        if (button.matches('.btn-edit-alerta') && typeof openAlertaModal === 'function') {
-            openAlertaModal(button.dataset.id);
+        if (targetElement.matches('.btn-edit-alerta') && typeof openAlertaModal === 'function') {
+            openAlertaModal(targetElement.dataset.id);
         }
-        if (button.matches('.btn-delete-alerta')) {
-            const alertaId = button.dataset.id;
-            const row = button.closest('tr');
+        if (targetElement.matches('.btn-delete-alerta')) {
+            const alertaId = targetElement.dataset.id;
+            const row = targetElement.closest('tr');
             const cliente = row ? row.cells[0].textContent : 'esta alerta';
             const medicamento = row ? row.cells[1].textContent : '';
 
@@ -156,6 +156,20 @@ document.addEventListener('DOMContentLoaded', () => {
                     alert(`Error al eliminar alerta: ${error.message}`);
                 }
             }
+        }
+
+        // Botones de generación de reportes
+        if (targetElement.matches('#btn-report-usuarios') && typeof generateUsuariosReport === 'function') {
+            generateUsuariosReport();
+        }
+        if (targetElement.matches('#btn-report-medicamentos') && typeof generateMedicamentosReport === 'function') {
+            generateMedicamentosReport();
+        }
+        if (targetElement.matches('#btn-report-alertas-activas') && typeof generateAlertasActivasReport === 'function') {
+            generateAlertasActivasReport();
+        }
+        if (targetElement.matches('#btn-report-auditoria') && typeof generateAuditoriaReport === 'function') {
+            generateAuditoriaReport();
         }
     });
 

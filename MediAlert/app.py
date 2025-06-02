@@ -8,7 +8,9 @@ from werkzeug.security import generate_password_hash, check_password_hash # Para
 import os
 import logging
 from dotenv import load_dotenv
-from datetime import time  # Importar el módulo time
+from datetime import date, time  # Importar date y time
+import uuid  # Para generar nombres únicos
+from werkzeug.utils import secure_filename  # Para asegurar nombres de archivo
 
 # Load environment variables from .env file
 load_dotenv()
@@ -23,6 +25,18 @@ PG_DB = os.getenv('PG_DB')
 PG_USER = os.getenv('PG_USER')
 PG_PASS = os.getenv('PG_PASS')
 PG_PORT = os.getenv('PG_PORT', '5432')
+
+# --- Configuración para Almacenamiento de Reportes ---
+INSTANCE_FOLDER_PATH = os.path.join(app.root_path, '..', 'instance')
+REPORTS_STORAGE_PATH = os.path.join(INSTANCE_FOLDER_PATH, 'generated_reports')
+if not os.path.exists(REPORTS_STORAGE_PATH):
+    os.makedirs(REPORTS_STORAGE_PATH)
+
+app.config['REPORTS_STORAGE_PATH'] = REPORTS_STORAGE_PATH
+app.config['ALLOWED_EXTENSIONS'] = {'pdf'}
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in app.config['ALLOWED_EXTENSIONS']
 
 def get_db_connection():
     """Establece y devuelve una conexión a la base de datos PostgreSQL."""
@@ -187,7 +201,9 @@ def session_check():
     })
 
 # --- API: GESTIÓN DE CLIENTES (Usuarios con rol 'cliente') ---
-@app.route('/api/admin/clientes', methods=['GET', 'POST'])
+# Snippet from MediAlert/app.py
+
+@app.route('/api/admin/clientes', methods=['GET', 'POST']) # Path remains for client management, but GET can be more versatile
 @admin_required
 def manage_clientes():
     conn = None
@@ -198,29 +214,43 @@ def manage_clientes():
         admin_id_actual = session.get('user_id')
 
         if request.method == 'GET':
-            # Por defecto, mostrar solo clientes activos
-            # Se podría añadir un parámetro ?estado=inactivo para ver los inactivos
-            estado_filtro = request.args.get('estado', 'activo')
-            if estado_filtro not in ['activo', 'inactivo', 'todos']:
-                estado_filtro = 'activo'
+            estado_filtro = request.args.get('estado', None) # Allow no default to fetch all if not specified
+            rol_filtro = request.args.get('rol', None) # Allow fetching specific roles or all
 
-            query = "SELECT id, nombre, cedula, email, estado_usuario FROM usuarios WHERE rol='cliente'"
+            query_parts = ["SELECT id, nombre, cedula, email, rol, estado_usuario FROM usuarios"]
+            conditions = []
             params = []
-            if estado_filtro != 'todos':
-                query += " AND estado_usuario = %s"
-                params.append(estado_filtro)
-            query += " ORDER BY nombre"
-            
-            cur.execute(query, tuple(params))
-            clientes = cur.fetchall()
-            return jsonify(clientes)
 
-        if request.method == 'POST':
+            if rol_filtro:
+                if rol_filtro == 'cliente':
+                    conditions.append("rol = 'cliente'")
+                elif rol_filtro == 'admin':
+                    conditions.append("rol = 'admin'")
+                # Not adding rol_filtro to params as it's directly in query string for safety
+            
+            if estado_filtro:
+                if estado_filtro != 'todos': # 'todos' means no estado filter
+                    conditions.append("estado_usuario = %s")
+                    params.append(estado_filtro)
+            
+            if conditions:
+                query_parts.append("WHERE " + " AND ".join(conditions))
+            
+            query_parts.append("ORDER BY rol, nombre")
+            
+            final_query = " ".join(query_parts)
+            cur.execute(final_query, tuple(params))
+            users = cur.fetchall()
+            return jsonify(users)
+
+        if request.method == 'POST': # This part remains specific to creating 'cliente' role users
             data = request.json
             nombre = data.get('nombre')
             cedula = data.get('cedula')
             email = data.get('email')
             contrasena_plain = data.get('contrasena')
+            rol_nuevo_usuario = 'cliente'  # Hardcoded for this POST through /api/admin/clientes
+            estado_nuevo_usuario = 'activo'
 
             if not all([nombre, cedula, email, contrasena_plain]):
                 return jsonify({'error': 'Nombre, cédula, email y contraseña son requeridos.'}), 400
@@ -231,24 +261,24 @@ def manage_clientes():
                 cur.execute(
                     """
                     INSERT INTO usuarios (nombre, cedula, email, contrasena, rol, estado_usuario) 
-                    VALUES (%s, %s, %s, %s, 'cliente', 'activo') RETURNING id
+                    VALUES (%s, %s, %s, %s, %s, %s) RETURNING id
                     """,
-                    (nombre, cedula, email, hashed_password)
+                    (nombre, cedula, email, hashed_password, rol_nuevo_usuario, estado_nuevo_usuario)
                 )
                 new_id = cur.fetchone()['id']
                 conn.commit()
                 
-                # La auditoría de INSERT la maneja el trigger de BD.
-                # Pero podemos registrar un evento de aplicación más específico.
-                registrar_auditoria_aplicacion(
+                # The audit trigger in the DB handles the direct INSERT.
+                # Application level audit might be more specific.
+                registrar_auditoria_aplicacion( #
                     'CREACION_CLIENTE', 
                     tabla_afectada='usuarios', 
                     registro_id=str(new_id),
-                    datos_nuevos={'nombre': nombre, 'cedula': cedula, 'email': email, 'rol': 'cliente', 'estado_usuario': 'activo'},
+                    datos_nuevos={'nombre': nombre, 'cedula': cedula, 'email': email, 'rol': rol_nuevo_usuario, 'estado_usuario': estado_nuevo_usuario},
                     detalles_adicionales={'creado_por_admin_id': admin_id_actual}
                 )
                 return jsonify({'message': 'Cliente creado con éxito.', 'id': new_id}), 201
-            except psycopg2.IntegrityError as e: # Ej. cédula o email duplicado
+            except psycopg2.IntegrityError as e: 
                 conn.rollback()
                 if "usuarios_cedula_key" in str(e):
                     return jsonify({'error': f'La cédula "{cedula}" ya está registrada.'}), 409
@@ -266,6 +296,7 @@ def manage_clientes():
     finally:
         if conn:
             conn.close()
+
 
 @app.route('/api/admin/clientes/<int:uid>', methods=['GET', 'PUT']) # DELETE se maneja con cambio de estado
 @admin_required
@@ -725,6 +756,7 @@ def get_mis_alertas_cliente():
 
 
 # --- API: AUDITORÍA (Solo Admin) ---
+# You might also want a limit parameter for the auditoria endpoint for PDF generation:
 @app.route('/api/admin/auditoria', methods=['GET'])
 @admin_required
 def get_auditoria_logs():
@@ -733,14 +765,14 @@ def get_auditoria_logs():
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
 
-        # Obtener el filtro de tabla afectada desde los parámetros de consulta
         tabla_filtro = request.args.get('tabla', None)
+        limit = request.args.get('limit', None) # New limit parameter
 
         query = """
             SELECT 
                 aud.id, 
                 aud.fecha_hora,
-                u_app.nombre as nombre_usuario_app, -- Nombre del usuario de la app que realizó la acción
+                u_app.nombre as nombre_usuario_app,
                 aud.usuario_db as usuario_postgres,
                 aud.accion, 
                 aud.tabla_afectada, 
@@ -750,15 +782,22 @@ def get_auditoria_logs():
                 aud.detalles_adicionales
             FROM auditoria aud
             LEFT JOIN usuarios u_app ON aud.usuario_id_app = u_app.id
-        """
+        """ #
         params = []
 
-        # Aplicar filtro si se especifica una tabla afectada
         if tabla_filtro:
             query += " WHERE aud.tabla_afectada = %s"
             params.append(tabla_filtro)
 
         query += " ORDER BY aud.fecha_hora DESC"
+
+        if limit:
+            try:
+                query += " LIMIT %s"
+                params.append(int(limit))
+            except ValueError:
+                app.logger.warn("Invalid limit parameter for auditoria endpoint.")
+                pass # Ignore invalid limit
 
         cur.execute(query, tuple(params))
         logs = cur.fetchall()
@@ -766,6 +805,126 @@ def get_auditoria_logs():
     except psycopg2.Error as e:
         app.logger.error(f"Error de BD al obtener logs de auditoría: {e}")
         return jsonify({'error': 'Error al cargar los registros de auditoría.'}), 500
+    finally:
+        if conn:
+            conn.close()
+            
+@app.route('/api/admin/reportes_log', methods=['GET', 'POST'])
+@admin_required
+def manage_reportes_log():
+    conn = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        admin_id_actual = session.get('user_id')
+
+        if request.method == 'POST':
+            data = request.json
+            tipo_reporte = data.get('tipo_reporte')
+            nombre_reporte = data.get('nombre_reporte')
+            pdf_filename = data.get('pdf_filename')
+
+            if not all([tipo_reporte, nombre_reporte, pdf_filename]):
+                return jsonify({'error': 'Tipo, nombre del reporte y nombre del archivo PDF son requeridos.'}), 400
+            
+            try:
+                cur.execute(
+                    """
+                    INSERT INTO reportes_log (tipo_reporte, nombre_reporte, pdf_filename, generado_por_usuario_id)
+                    VALUES (%s, %s, %s, %s) RETURNING id
+                    """,
+                    (tipo_reporte, nombre_reporte, pdf_filename, admin_id_actual)
+                )
+                log_id = cur.fetchone()['id']
+                conn.commit()
+                return jsonify({'message': 'Generación de reporte registrada con éxito.', 'log_id': log_id}), 201
+            except psycopg2.IntegrityError as e:
+                conn.rollback()
+                app.logger.error(f"Error de integridad al registrar log de reporte: {e}")
+                return jsonify({'error': 'Error de integridad al guardar el log del reporte.'}), 409
+            except psycopg2.Error as e:
+                conn.rollback()
+                app.logger.error(f"Error de BD al registrar generación de reporte: {e}")
+                return jsonify({'error': 'Error de base de datos al registrar la generación del reporte.'}), 500
+
+        if request.method == 'GET':
+            cur.execute("""
+                SELECT rl.id, rl.tipo_reporte, rl.nombre_reporte, rl.pdf_filename, 
+                       rl.fecha_generacion, u.nombre as generado_por_nombre
+                FROM reportes_log rl
+                LEFT JOIN usuarios u ON rl.generado_por_usuario_id = u.id
+                ORDER BY rl.fecha_generacion DESC
+                LIMIT 50
+            """)
+            logs = cur.fetchall()
+            return jsonify(logs)
+
+    except psycopg2.Error as e:
+        app.logger.error(f"Error de conexión/BD en manage_reportes_log: {e}")
+        return jsonify({'error': 'Error interno del servidor.'}), 500
+    finally:
+        if conn:
+            conn.close()
+
+@app.route('/api/admin/reportes/upload_pdf', methods=['POST'])
+@admin_required
+def upload_report_pdf():
+    if 'report_pdf' not in request.files:
+        return jsonify({'error': 'No se encontró el archivo PDF en la solicitud.'}), 400
+    
+    file = request.files['report_pdf']
+    
+    if file.filename == '':
+        return jsonify({'error': 'No se seleccionó ningún archivo.'}), 400
+        
+    if file and allowed_file(file.filename):
+        unique_id = uuid.uuid4()
+        extension = secure_filename(file.filename.rsplit('.', 1)[1].lower())
+        storage_filename = f"{unique_id}.{extension}"
+        
+        try:
+            file.save(os.path.join(app.config['REPORTS_STORAGE_PATH'], storage_filename))
+            return jsonify({'message': 'Archivo PDF subido con éxito.', 'filename': storage_filename}), 201
+        except Exception as e:
+            app.logger.error(f"Error al guardar el archivo PDF subido: {e}")
+            return jsonify({'error': 'Error interno al guardar el archivo PDF.'}), 500
+    else:
+        return jsonify({'error': 'Tipo de archivo no permitido. Solo se aceptan PDFs.'}), 400
+
+@app.route('/api/admin/reportes/download/<int:log_id>', methods=['GET'])
+@admin_required
+def download_report_pdf(log_id):
+    conn = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        
+        cur.execute("SELECT pdf_filename, nombre_reporte FROM reportes_log WHERE id = %s", (log_id,))
+        report_log = cur.fetchone()
+        
+        if not report_log:
+            return jsonify({'error': 'Registro de reporte no encontrado.'}), 404
+            
+        pdf_filename = report_log['pdf_filename']
+        download_name = secure_filename(f"{report_log['nombre_reporte'].replace(' ', '_')}_{pdf_filename[:8]}.pdf")
+
+        reports_dir = app.config['REPORTS_STORAGE_PATH']
+        
+        if not os.path.exists(os.path.join(reports_dir, pdf_filename)):
+            app.logger.error(f"Archivo PDF no encontrado en el servidor: {os.path.join(reports_dir, pdf_filename)}")
+            return jsonify({'error': 'Archivo PDF no encontrado en el servidor.'}), 404
+
+        return send_from_directory(directory=reports_dir, 
+                                   path=pdf_filename, 
+                                   as_attachment=True, 
+                                   download_name=download_name)
+                                   
+    except psycopg2.Error as e:
+        app.logger.error(f"Error de BD al intentar descargar reporte {log_id}: {e}")
+        return jsonify({'error': 'Error de base de datos al obtener información del reporte.'}), 500
+    except Exception as e:
+        app.logger.error(f"Error general al intentar descargar reporte {log_id}: {e}")
+        return jsonify({'error': f'Error al procesar la descarga del reporte: {str(e)}'}), 500
     finally:
         if conn:
             conn.close()
@@ -806,5 +965,9 @@ if __name__ == '__main__':
     # Configurar logging básico
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s: %(message)s')
     app.logger.info("Iniciando la aplicación MediAlert...")
+    if not os.path.exists(INSTANCE_FOLDER_PATH):
+        os.makedirs(INSTANCE_FOLDER_PATH)
+    if not os.path.exists(app.config['REPORTS_STORAGE_PATH']):
+        os.makedirs(app.config['REPORTS_STORAGE_PATH'])
     app.run(debug=True, host='0.0.0.0', port=5000)
 

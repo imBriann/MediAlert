@@ -12,8 +12,8 @@ PG_PORT = os.getenv('PG_PORT', '5432')
 # --- Comandos SQL para crear la estructura de la base de datos ---
 SQL_COMMANDS = """
 -- Borra las tablas y secuencias existentes para empezar de cero
-DROP TABLE IF EXISTS reportes, alertas, medicamentos, usuarios, auditoria CASCADE;
-DROP SEQUENCE IF EXISTS usuarios_id_seq, medicamentos_id_seq, alertas_id_seq, auditoria_id_seq;
+DROP TABLE IF EXISTS reportes, alertas, medicamentos, usuarios, auditoria, reportes_log CASCADE;
+DROP SEQUENCE IF EXISTS usuarios_id_seq, medicamentos_id_seq, alertas_id_seq, auditoria_id_seq, reportes_log_id_seq;
 
 --------------------------------------------------------------------------------
 -- SECCIÓN: SECUENCIAS
@@ -23,6 +23,7 @@ CREATE SEQUENCE usuarios_id_seq START WITH 1 INCREMENT BY 1;
 CREATE SEQUENCE medicamentos_id_seq START WITH 1 INCREMENT BY 1;
 CREATE SEQUENCE alertas_id_seq START WITH 1 INCREMENT BY 1;
 CREATE SEQUENCE auditoria_id_seq START WITH 1 INCREMENT BY 1;
+CREATE SEQUENCE reportes_log_id_seq START WITH 1 INCREMENT BY 1;
 
 --------------------------------------------------------------------------------
 -- SECCIÓN: TABLAS
@@ -105,6 +106,22 @@ CREATE TABLE auditoria (
 );
 COMMENT ON TABLE auditoria IS 'Tabla centralizada para registrar eventos de auditoría del sistema.';
 
+-- Tabla: reportes_log
+-- Descripción: Registra los eventos de generación de reportes y el PDF almacenado.
+CREATE TABLE reportes_log (
+    id INTEGER PRIMARY KEY DEFAULT nextval('reportes_log_id_seq'),
+    tipo_reporte VARCHAR(100) NOT NULL,
+    nombre_reporte VARCHAR(255) NOT NULL,
+    pdf_filename VARCHAR(255) UNIQUE NOT NULL, -- Nombre de archivo único del PDF almacenado
+    generado_por_usuario_id INTEGER,
+    fecha_generacion TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_reportes_log_usuario FOREIGN KEY (generado_por_usuario_id) REFERENCES usuarios(id) ON DELETE SET NULL
+);
+COMMENT ON TABLE reportes_log IS 'Registra los eventos de generación de reportes y la referencia al PDF almacenado en el servidor.';
+COMMENT ON COLUMN reportes_log.tipo_reporte IS 'Identificador programático del tipo de reporte, ej: "usuarios", "medicamentos".';
+COMMENT ON COLUMN reportes_log.nombre_reporte IS 'Nombre descriptivo del reporte generado, ej: "Reporte de Usuarios del Sistema".';
+COMMENT ON COLUMN reportes_log.pdf_filename IS 'Nombre de archivo único (UUID.pdf) del PDF almacenado en el servidor.';
+COMMENT ON COLUMN reportes_log.generado_por_usuario_id IS 'ID del usuario administrador que generó el reporte.';
 --------------------------------------------------------------------------------
 -- SECCIÓN: FUNCIONES DE POSTGRESQL
 --------------------------------------------------------------------------------

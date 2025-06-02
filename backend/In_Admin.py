@@ -1,74 +1,335 @@
-# backend/insert_admin_user.py
+# backend/populate_database.py
 import psycopg2
 import os
 from dotenv import load_dotenv
 from werkzeug.security import generate_password_hash
+import random
+from datetime import datetime, timedelta
 
 # Cargar variables de entorno desde el archivo .env
 load_dotenv()
 
-# --- Configuración de la Conexión a la Base de Datos (igual que en init_db.py y app.py) ---
+# --- Configuración de la Conexión a la Base de Datos ---
 PG_HOST = os.getenv('PG_HOST', 'localhost')
 PG_DB = os.getenv('PG_DB', 'medialert')
 PG_USER = os.getenv('PG_USER', 'postgres')
 PG_PASS = os.getenv('PG_PASS', '0102')  # ¡Usa tu contraseña real o una variable de entorno!
 PG_PORT = os.getenv('PG_PORT', '5432')
 
-# --- Detalles del Administrador a Insertar ---
-ADMIN_NOMBRE = "Admin Script"
-ADMIN_CEDULA = "admin999"  # Asegúrate de que esta cédula sea única
-ADMIN_EMAIL = "adminscript@medialert.co"  # Asegúrate de que este email sea único
-ADMIN_CONTRASENA_PLAIN = "1234"
-ADMIN_ROL = "admin"
-ADMIN_ESTADO = "activo"
+# --- Datos para Generación ---
+first_names = ["Carlos", "Ana", "Juan", "Maria", "Luis", "Laura", "Pedro", "Sofia", "Diego", "Valentina",
+               "Andres", "Camila", "Santiago", "Isabella", "Gabriel", "Mariana", "Jose", "Daniela",
+               "Miguel", "Valeria", "Ricardo", "Lucia", "Fernando", "Paula", "Javier", "Gabriela"]
+last_names = ["González", "Rodríguez", "Pérez", "Martínez", "García", "López", "Hernández", "Sánchez",
+              "Ramírez", "Torres", "Flores", "Rivera", "Gómez", "Díaz", "Vargas", "Castro",
+              "Méndez", "Ortiz", "Silva", "Romero", "Navarro", "Rojas", "Morales", "Acosta"]
 
-def insertar_admin():
-    conn = None
-    cur = None
+common_pass = "password123" # Common password for generated users for simplicity in a dev environment
+hashed_common_pass = generate_password_hash(common_pass, method='pbkdf2:sha256')
+
+# Lista de medicamentos (similar a la de init_db.py)
+lista_medicamentos_a_insertar = [
+    {"nombre": "Paracetamol 500mg", "descripcion": "Analgésico y antipirético.", "composicion": "Paracetamol 500mg", "sintomas_secundarios": "náuseas, hepatotoxicidad en sobredosis", "indicaciones": "fiebre, dolor leve a moderado", "rango_edad": "Todas las edades", "estado_medicamento": "disponible"},
+    {"nombre": "Ibuprofeno 400mg", "descripcion": "Antiinflamatorio no esteroideo.", "composicion": "Ibuprofeno 400mg", "sintomas_secundarios": "gastritis, dolor abdominal", "indicaciones": "dolor, inflamación, fiebre", "rango_edad": "Mayores de 6 meses", "estado_medicamento": "disponible"},
+    {"nombre": "Aspirina 100mg", "descripcion": "Antiplaquetario y antiinflamatorio.", "composicion": "Ácido acetilsalicílico 100mg", "sintomas_secundarios": "sangrado gastrointestinal", "indicaciones": "prevención trombosis, dolor leve", "rango_edad": "Adultos", "estado_medicamento": "disponible"},
+    {"nombre": "Amoxicilina 500mg", "descripcion": "Antibiótico β-lactámico.", "composicion": "Amoxicilina trihidrato 500mg", "sintomas_secundarios": "diarrea, candidiasis", "indicaciones": "infecciones respiratorias, urinarias", "rango_edad": "Todas las edades", "estado_medicamento": "disponible"},
+    {"nombre": "Azitromicina 500mg", "descripcion": "Antibiótico macrólido.", "composicion": "Azitromicina dihidrato 500mg", "sintomas_secundarios": "dolor abdominal, diarrea", "indicaciones": "infecciones respiratorias, otitis", "rango_edad": "Adultos y niños mayores de 6 meses", "estado_medicamento": "disponible"},
+    {"nombre": "Ciprofloxacino 500mg", "descripcion": "Antibiótico fluoroquinolónico.", "composicion": "Ciprofloxacino clorhidrato 500mg", "sintomas_secundarios": "tendinitis, fotosensibilidad", "indicaciones": "ITU, gastroenteritis", "rango_edad": "Adultos y niños mayores de 18 años", "estado_medicamento": "disponible"},
+    {"nombre": "Metformina 850mg", "descripcion": "Antidiabético oral, biguanida.", "composicion": "Metformina clorhidrato 850mg", "sintomas_secundarios": "diarrea, acidosis láctica (raro)", "indicaciones": "diabetes tipo 2", "rango_edad": "Adultos", "estado_medicamento": "disponible"},
+    {"nombre": "Atorvastatina 20mg", "descripcion": "Reductor de lípidos, estatina.", "composicion": "Atorvastatina cálcica 20mg", "sintomas_secundarios": "mialgias, elevación de transaminasas", "indicaciones": "hipercolesterolemia", "rango_edad": "Adultos", "estado_medicamento": "disponible"},
+    {"nombre": "Omeprazol 20mg", "descripcion": "Inhibidor de bomba de protones.", "composicion": "Omeprazol 20mg", "sintomas_secundarios": "dolor de cabeza, diarrea", "indicaciones": "reflujo gastroesofágico, úlcera péptica", "rango_edad": "Adultos y niños mayores de 1 año", "estado_medicamento": "disponible"},
+    {"nombre": "Ranitidina 150mg", "descripcion": "Antagonista H2, reduce producción de ácido.", "composicion": "Ranitidina 150mg", "sintomas_secundarios": "constipación, somnolencia", "indicaciones": "úlcera gástrica, reflujo", "rango_edad": "Adultos y niños mayores de 12 años", "estado_medicamento": "disponible"},
+    {"nombre": "Loratadina 10mg", "descripcion": "Antihistamínico H1 de segunda generación.", "composicion": "Loratadina 10mg", "sintomas_secundarios": "cefalea, somnolencia (raro)", "indicaciones": "alergias, rinitis alérgica", "rango_edad": "Adultos y niños mayores de 2 años", "estado_medicamento": "disponible"},
+    {"nombre": "Cetirizina 10mg", "descripcion": "Antihistamínico H1 de segunda generación.", "composicion": "Cetirizina 10mg", "sintomas_secundarios": "somnolencia, boca seca", "indicaciones": "urticaria, rinitis alérgica", "rango_edad": "Adultos y niños mayores de 6 años", "estado_medicamento": "disponible"},
+    {"nombre": "Salbutamol 100mcg", "descripcion": "Broncodilatador β2 agonista de acción corta.", "composicion": "Salbutamol sulfato 100mcg por dosis", "sintomas_secundarios": "temblor, taquicardia", "indicaciones": "asma, EPOC", "rango_edad": "Todas las edades", "estado_medicamento": "disponible"},
+    {"nombre": "Prednisona 5mg", "descripcion": "Corticosteroide oral de acción intermedia.", "composicion": "Prednisona 5mg", "sintomas_secundarios": "aumento de peso, hipertensión", "indicaciones": "inflamación, alergias severas", "rango_edad": "Adultos", "estado_medicamento": "disponible"},
+    {"nombre": "Metoclopramida 10mg", "descripcion": "Procinético y antiemético.", "composicion": "Metoclopramida 10mg", "sintomas_secundarios": "somnolencia, espasmos musculares", "indicaciones": "náuseas, gastroparesia", "rango_edad": "Adultos y niños mayores de 1 año", "estado_medicamento": "disponible"},
+    {"nombre": "Omeprazol 40mg", "descripcion": "IBP para tratamiento de úlceras más severas.", "composicion": "Omeprazol 40mg", "sintomas_secundarios": "insomnio, mareo", "indicaciones": "síndrome de Zollinger-Ellison", "rango_edad": "Adultos", "estado_medicamento": "disponible"},
+    {"nombre": "Naproxeno 500mg", "descripcion": "AINE de larga acción.", "composicion": "Naproxeno 500mg", "sintomas_secundarios": "ulceración GI, retención de líquidos", "indicaciones": "artritis, dolor crónico", "rango_edad": "Adultos y niños mayores de 12 años", "estado_medicamento": "disponible"},
+    {"nombre": "Clonazepam 0.5mg", "descripcion": "Benzodiacepina de acción prolongada.", "composicion": "Clonazepam 0.5mg", "sintomas_secundarios": "somnolencia, dependencia", "indicaciones": "ansiedad, epilepsia", "rango_edad": "Adultos y niños mayores de 18 años", "estado_medicamento": "disponible"},
+    {"nombre": "Diazepam 10mg", "descripcion": "Benzodiacepina de acción larga.", "composicion": "Diazepam 10mg", "sintomas_secundarios": "sedación, ataxia", "indicaciones": "ansiedad, espasmos musculares", "rango_edad": "Adultos y niños mayores de 12 años", "estado_medicamento": "disponible"},
+    {"nombre": "Tramadol 50mg", "descripcion": "Analgesico opioide de moderada potencia.", "composicion": "Tramadol clorhidrato 50mg", "sintomas_secundarios": "mareo, náuseas", "indicaciones": "dolor moderado a severo", "rango_edad": "Adultos", "estado_medicamento": "disponible"},
+    {"nombre": "Codeína 30mg", "descripcion": "Opioide leve, antitúsivo ocasional.", "composicion": "Codeína fosfato 30mg", "sintomas_secundarios": "estreñimiento, somnolencia", "indicaciones": "dolor leve, tos seca", "rango_edad": "Adultos y niños mayores de 12 años", "estado_medicamento": "disponible"},
+    {"nombre": "Metamizol 575mg", "descripcion": "Analgésico y antipirético no opioide.", "composicion": "Metamizol sódico 575mg", "sintomas_secundarios": "agranulocitosis (raro), hipotensión", "indicaciones": "dolor agudo, fiebre alta", "rango_edad": "Adultos y niños mayores de 3 meses", "estado_medicamento": "disponible"},
+    {"nombre": "Ondansetrón 4mg", "descripcion": "Antiemético 5-HT3 receptor antagonista.", "composicion": "Ondansetrón 4mg", "sintomas_secundarios": "estreñimiento, cefalea", "indicaciones": "náuseas por quimioterapia", "rango_edad": "Adultos y niños mayores de 6 meses", "estado_medicamento": "disponible"},
+    {"nombre": "Fluconazol 150mg", "descripcion": "Antifúngico azólico de amplio espectro.", "composicion": "Fluconazol 150mg", "sintomas_secundarios": "náuseas, hepatotoxicidad", "indicaciones": "candidiasis vaginal", "rango_edad": "Adultos y niños mayores de 2 años", "estado_medicamento": "disponible"},
+    {"nombre": "Ketoconazol 200mg", "descripcion": "Antifúngico azólico sistémico.", "composicion": "Ketoconazol 200mg", "sintomas_secundarios": "alteraciones hepáticas", "indicaciones": "dermatofitosis, candidiasis", "rango_edad": "Adultos y niños mayores de 2 años", "estado_medicamento": "disponible"},
+    {"nombre": "Metronidazol 500mg", "descripcion": "Antibacteriano y antiprotozoario nitroimidazol.", "composicion": "Metronidazol 500mg", "sintomas_secundarios": "sabor metálico, neuropatía periferica", "indicaciones": "infecciones anaerobias, giardiasis", "rango_edad": "Adultos y niños mayores de 3 años", "estado_medicamento": "disponible"},
+    {"nombre": "Clindamicina 300mg", "descripcion": "Antibiótico lincosamida.", "composicion": "Clindamicina fosfato 300mg", "sintomas_secundarios": "colitis pseudomembranosa", "indicaciones": "infecciones de piel, hueso", "rango_edad": "Adultos y niños mayores de 1 año", "estado_medicamento": "disponible"},
+    {"nombre": "Enalapril 10mg", "descripcion": "IECA para hipertensión.", "composicion": "Enalapril maleato 10mg", "sintomas_secundarios": "tos seca, hipotensión", "indicaciones": "hipertensión, IC", "rango_edad": "Adultos", "estado_medicamento": "disponible"},
+    {"nombre": "Losartán 50mg", "descripcion": "ARA-II para hipertensión.", "composicion": "Losartán potásico 50mg", "sintomas_secundarios": "mareo, hiperkalemia", "indicaciones": "hipertensión, nefropatía diabética", "rango_edad": "Adultos", "estado_medicamento": "disponible"},
+    {"nombre": "Amlodipino 5mg", "descripcion": "Bloqueador de canales de calcio dihidropiridínico.", "composicion": "Amlodipino besilato 5mg", "sintomas_secundarios": "edema periférico, cefalea", "indicaciones": "hipertensión, angina", "rango_edad": "Adultos y niños mayores de 6 años", "estado_medicamento": "disponible"},
+    {"nombre": "Metoprolol 50mg", "descripcion": "Betabloqueador cardioselectivo.", "composicion": "Metoprolol tartrato 50mg", "sintomas_secundarios": "bradicardia, fatiga", "indicaciones": "hipertensión, angina", "rango_edad": "Adultos", "estado_medicamento": "disponible"},
+    {"nombre": "Propanolol 40mg", "descripcion": "Betabloqueador no selectivo.", "composicion": "Propanolol 40mg", "sintomas_secundarios": "broncoespasmo, fatiga", "indicaciones": "hipertensión, temblor esencial", "rango_edad": "Adultos", "estado_medicamento": "disponible"},
+    {"nombre": "Hidroclorotiazida 25mg", "descripcion": "Diurético tiazídico.", "composicion": "Hidroclorotiazida 25mg", "sintomas_secundarios": "hipopotasemia, hiponatremia", "indicaciones": "hipertensión", "rango_edad": "Adultos", "estado_medicamento": "disponible"},
+    {"nombre": "Furosemida 40mg", "descripcion": "Diurético de asa.", "composicion": "Furosemida 40mg", "sintomas_secundarios": "deshidratación, ototoxicidad (raro)", "indicaciones": "edema, IC", "rango_edad": "Adultos y niños mayores de 18 años", "estado_medicamento": "disponible"},
+    {"nombre": "Espironolactona 25mg", "descripcion": "Diurético ahorrador de potasio.", "composicion": "Espironolactona 25mg", "sintomas_secundarios": "hiperkalemia, ginecomastia", "indicaciones": "cirrosis, IC", "rango_edad": "Adultos", "estado_medicamento": "disponible"},
+    {"nombre": "Warfarina 5mg", "descripcion": "Anticoagulante cumarínico.", "composicion": "Warfarina sódica 5mg", "sintomas_secundarios": "hemorragias, necrosis cutánea", "indicaciones": "trombosis, fibrilación auricular", "rango_edad": "Adultos", "estado_medicamento": "disponible"},
+    {"nombre": "Heparina sódica 5000UI", "descripcion": "Anticoagulante de acción inmediata.", "composicion": "Heparina sódica 5000UI/ml", "sintomas_secundarios": "trombocitopenia, hemorragia", "indicaciones": "profilaxis trombótica", "rango_edad": "Adultos y niños mayores de 2 años", "estado_medicamento": "disponible"},
+    {"nombre": "Enoxaparina 40mg", "descripcion": "HBPM para anticoagulación subcutánea.", "composicion": "Enoxaparina sódica 40mg", "sintomas_secundarios": "trombocitopenia, hemorragia", "indicaciones": "trombosis venosa profunda", "rango_edad": "Adultos", "estado_medicamento": "disponible"},
+    {"nombre": "Clopidogrel 75mg", "descripcion": "Inhibidor de P2Y12, antiplaquetario.", "composicion": "Clopidogrel 75mg", "sintomas_secundarios": "sangrado, dispepsia", "indicaciones": "síndrome coronario agudo", "rango_edad": "Adultos", "estado_medicamento": "disponible"},
+    {"nombre": "Simvastatina 20mg", "descripcion": "Estatina para reducción de colesterol LDL.", "composicion": "Simvastatina 20mg", "sintomas_secundarios": "mialgias, elevación de enzimas hepáticas", "indicaciones": "dislipidemia", "rango_edad": "Adultos", "estado_medicamento": "disponible"},
+    {"nombre": "Fenofibrato 145mg", "descripcion": "Fibrato para reducción de triglicéridos.", "composicion": "Fenofibrato 145mg", "sintomas_secundarios": "dispepsia, mialgias", "indicaciones": "hipertrigliceridemia", "rango_edad": "Adultos", "estado_medicamento": "disponible"},
+    {"nombre": "Pantoprazol 40mg", "descripcion": "IBP para mantenimiento de reflujo.", "composicion": "Pantoprazol sódico 40mg", "sintomas_secundarios": "cefalea, diarrea", "indicaciones": "ERGE, úlcera péptica", "rango_edad": "Adultos y niños mayores de 1 año", "estado_medicamento": "disponible"},
+    {"nombre": "Esomeprazol 40mg", "descripcion": "S-isoforma de omeprazol, IBP.", "composicion": "Esomeprazol magnesio 40mg", "sintomas_secundarios": "mareo, flatulencia", "indicaciones": "ERGE", "rango_edad": "Adultos", "estado_medicamento": "disponible"},
+    {"nombre": "Fexofenadina 180mg", "descripcion": "Antihistamínico H1 no sedante.", "composicion": "Fexofenadina 180mg", "sintomas_secundarios": "cefalea, náuseas", "indicaciones": "alergias estacionales", "rango_edad": "Adultos y niños mayores de 6 años", "estado_medicamento": "disponible"},
+    {"nombre": "Montelukast 10mg", "descripcion": "Antileucotrieno para asma y rinoconjuntivitis.", "composicion": "Montelukast sodio 10mg", "sintomas_secundarios": "cefalea, dolor abdominal", "indicaciones": "asma, rinitis alérgica", "rango_edad": "Adultos y niños mayores de 2 años", "estado_medicamento": "disponible"},
+    {"nombre": "Budesonida 200mcg", "descripcion": "Corticosteroide inhalado.", "composicion": "Budesonida 200mcg/dosis", "sintomas_secundarios": "irritación orofaríngea", "indicaciones": "asma, EPOC", "rango_edad": "Adultos y niños mayores de 6 años", "estado_medicamento": "disponible"},
+    {"nombre": "Beclometasona 100mcg", "descripcion": "Corticosteroide nasal para alergias.", "composicion": "Beclometasona dipropionato 100mcg", "sintomas_secundarios": "irritación nasal", "indicaciones": "rinitis alérgica", "rango_edad": "Adultos y niños mayores de 6 años", "estado_medicamento": "disponible"},
+    {"nombre": "Insulina glargina 100UI/ml", "descripcion": "Insulina basal de acción prolongada.", "composicion": "Insulina glargina 100UI/ml", "sintomas_secundarios": "hipoglucemia, lipodistrofia", "indicaciones": "diabetes tipo 1 y tipo 2", "rango_edad": "Adultos", "estado_medicamento": "disponible"},
+    {"nombre": "Glimepirida 2mg", "descripcion": "Sulfonilurea para diabetes tipo 2.", "composicion": "Glimepirida 2mg", "sintomas_secundarios": "hipoglucemia, aumento de peso", "indicaciones": "diabetes tipo 2", "rango_edad": "Adultos", "estado_medicamento": "disponible"},
+    {"nombre": "Gliclazida 80mg", "descripcion": "Sulfonilurea de segunda generación.", "composicion": "Gliclazida 80mg", "sintomas_secundarios": "hipoglucemia, náuseas", "indicaciones": "diabetes tipo 2", "rango_edad": "Adultos", "estado_medicamento": "disponible"},
+    {"nombre": "Sitagliptina 100mg", "descripcion": "Inhibidor de DPP-4 para diabetes.", "composicion": "Sitagliptina fosfato sódico 100mg", "sintomas_secundarios": "cefalea, nasofaringitis", "indicaciones": "diabetes tipo 2", "rango_edad": "Adultos", "estado_medicamento": "disponible"},
+    {"nombre": "Empagliflozina 10mg", "descripcion": "Inhibidor de SGLT2 para diabetes.", "composicion": "Empagliflozina 10mg", "sintomas_secundarios": "infecciones urinarias, poliuria", "indicaciones": "diabetes tipo 2", "rango_edad": "Adultos", "estado_medicamento": "disponible"},
+    {"nombre": "Sertralina 50mg", "descripcion": "ISRS para depresión y ansiedad.", "composicion": "Sertralina 50mg", "sintomas_secundarios": "náuseas, insomnio", "indicaciones": "depresión, TOC", "rango_edad": "Adultos", "estado_medicamento": "disponible"},
+    {"nombre": "Fluoxetina 20mg", "descripcion": "ISRS de larga vida media.", "composicion": "Fluoxetina 20mg", "sintomas_secundarios": "insomnio, disfunción sexual", "indicaciones": "depresión, bulimia nerviosa", "rango_edad": "Adultos", "estado_medicamento": "disponible"},
+    {"nombre": "Citalopram 20mg", "descripcion": "ISRS para trastornos depresivos.", "composicion": "Citalopram hidrobromuro 20mg", "sintomas_secundarios": "mareo, fatiga", "indicaciones": "depresión", "rango_edad": "Adultos", "estado_medicamento": "disponible"},
+    {"nombre": "Alprazolam 0.5mg", "descripcion": "Benzodiacepina de acción corta.", "composicion": "Alprazolam 0.5mg", "sintomas_secundarios": "dependencia, sedación", "indicaciones": "ansiedad, pánico", "rango_edad": "Adultos", "estado_medicamento": "disponible"},
+    {"nombre": "Haloperidol 5mg", "descripcion": "Antipsicótico típico de alta potencia.", "composicion": "Haloperidol 5mg", "sintomas_secundarios": "rigidez muscular, acatisia", "indicaciones": "esquizofrenia, psicosis aguda", "rango_edad": "Adultos", "estado_medicamento": "disponible"},
+    {"nombre": "Quetiapina 50mg", "descripcion": "Antipsicótico atípico.", "composicion": "Quetiapina fumarato 50mg", "sintomas_secundarios": "sedación, aumento de peso", "indicaciones": "esquizofrenia, bipolaridad", "rango_edad": "Adultos", "estado_medicamento": "disponible"},
+    {"nombre": "Topiramato 100mg", "descripcion": "Antiepiléptico y profilaxis de migraña.", "composicion": "Topiramato 100mg", "sintomas_secundarios": "mareo, pérdida de peso", "indicaciones": "epilepsia, migraña", "rango_edad": "Adultos y niños mayores de 2 años", "estado_medicamento": "disponible"},
+    {"nombre": "Sumatriptán 50mg", "descripcion": "Agonista 5-HT1 para migraña.", "composicion": "Sumatriptán succinato 50mg", "sintomas_secundarios": "parestesias, sensación de opresión torácica", "indicaciones": "migraña aguda", "rango_edad": "Adultos y niños mayores de 12 años", "estado_medicamento": "disponible"},
+    {"nombre": "Aciclovir 400mg", "descripcion": "Antiviral inhibidor de ADN polimerasa.", "composicion": "Aciclovir 400mg", "sintomas_secundarios": "cefalea, náuseas", "indicaciones": "herpes labial, varicela", "rango_edad": "Adultos y niños mayores de 2 años", "estado_medicamento": "disponible"},
+    {"nombre": "Valaciclovir 500mg", "descripcion": "Profármaco de aciclovir con mejor biodisponibilidad.", "composicion": "Valaciclovir 500mg", "sintomas_secundarios": "dolor de cabeza, náuseas", "indicaciones": "herpes zóster", "rango_edad": "Adultos y niños mayores de 12 años", "estado_medicamento": "disponible"},
+    {"nombre": "Oseltamivir 75mg", "descripcion": "Inhibidor de neuraminidasa para influenza.", "composicion": "Oseltamivir fosfato 75mg", "sintomas_secundarios": "náuseas, vómitos", "indicaciones": "gripe A/B", "rango_edad": "Adultos y niños mayores de 1 año", "estado_medicamento": "disponible"},
+    {"nombre": "Loperamida 2mg", "descripcion": "Antidiarreico opioide sin pasar BHE.", "composicion": "Loperamida 2mg", "sintomas_secundarios": "estreñimiento, mareo", "indicaciones": "diarrea aguda", "rango_edad": "Adultos y niños mayores de 2 años", "estado_medicamento": "disponible"},
+    {"nombre": "Lactulosa 10g/15ml", "descripcion": "Laxante osmótico.", "composicion": "Lactulosa 10g por 15ml", "sintomas_secundarios": "flatulencia, dolor abdominal", "indicaciones": "estreñimiento", "rango_edad": "Adultos y niños mayores de 1 año", "estado_medicamento": "disponible"},
+    {"nombre": "Doxiciclina 100mg", "descripcion": "Antibiótico tetraciclina de amplio espectro.", "composicion": "Doxiciclina 100mg", "sintomas_secundarios": "fotosensibilidad, dispepsia", "indicaciones": "acné, infecciones respiratorias", "rango_edad": "Adultos y niños mayores de 8 años", "estado_medicamento": "disponible"},
+    {"nombre": "Eritromicina 500mg", "descripcion": "Antibiótico macrólido de primera generación.", "composicion": "Eritromicina estolato 500mg", "sintomas_secundarios": "colestasis, náuseas", "indicaciones": "infecciones respiratorias", "rango_edad": "Adultos y niños mayores de 6 meses", "estado_medicamento": "disponible"},
+    {"nombre": "Claritromicina 500mg", "descripcion": "Macrólido de segunda generación.", "composicion": "Claritromicina 500mg", "sintomas_secundarios": "sabor metálico, diarrea", "indicaciones": "infecciones de piel", "rango_edad": "Adultos y niños mayores de 6 años", "estado_medicamento": "disponible"},
+    {"nombre": "Terapia esteroidal oral varia según paciente", "descripcion": "Protocolos variados según patología.", "composicion": "Dosis ajustada de corticoides", "sintomas_secundarios": "variable", "indicaciones": "condiciones inflamatorias graves", "rango_edad": "Adultos", "estado_medicamento": "disponible"},
+    {"nombre": "Fenacetina Pura", "descripcion": "Analgésico antiguo, retirado del mercado.", "composicion": "Fenacetina", "sintomas_secundarios": "Nefropatía, carcinogenicidad", "indicaciones": "Ya no se usa", "rango_edad": "N/A", "estado_medicamento": "discontinuado"},
+    {"nombre": "Levotiroxina 50mcg", "descripcion": "Hormona tiroidea sintética.", "composicion": "Levotiroxina sódica 50mcg", "sintomas_secundarios": "palpitaciones, pérdida de peso", "indicaciones": "Hipotiroidismo", "rango_edad": "Todas las edades", "estado_medicamento": "disponible"},
+    {"nombre": "Pregabalina 75mg", "descripcion": "Análogo del GABA.", "composicion": "Pregabalina 75mg", "sintomas_secundarios": "mareo, somnolencia", "indicaciones": "Dolor neuropático, fibromialgia, epilepsia", "rango_edad": "Adultos", "estado_medicamento": "disponible"},
+    {"nombre": "Vitamina D3 1000UI", "descripcion": "Suplemento de vitamina D.", "composicion": "Colecalciferol 1000 UI", "sintomas_secundarios": "Hipercalcemia (en sobredosis)", "indicaciones": "Deficiencia de vitamina D", "rango_edad": "Todas las edades", "estado_medicamento": "disponible"},
+    {"nombre": "Hierro Fumarato 200mg", "descripcion": "Suplemento de hierro.", "composicion": "Fumarato ferroso 200mg", "sintomas_secundarios": "Estreñimiento, heces oscuras", "indicaciones": "Anemia ferropénica", "rango_edad": "Todas las edades", "estado_medicamento": "disponible"}
+]
+
+
+dosis_ejemplos = ["1 comprimido", "2 tabletas", "10 mg", "5 ml", "1 cápsula", "1 aplicación"]
+frecuencia_ejemplos = ["Cada 8 horas", "Una vez al día", "Cada 12 horas", "Antes de dormir", "Con cada comida", "Cada 6 horas", "Dos veces al día"]
+alert_states = ["activa", "inactiva", "completada"]
+
+
+def get_db_connection():
+    conn = psycopg2.connect(
+        host=PG_HOST,
+        database=PG_DB,
+        user=PG_USER,
+        password=PG_PASS,
+        port=PG_PORT
+    )
+    conn.set_client_encoding('UTF8')
+    return conn
+
+def limpiar_tablas(conn):
+    cur = conn.cursor()
+    print("Limpiando datos existentes de las tablas...")
     try:
-        print(f"Conectando a la base de datos PostgreSQL (Host: {PG_HOST}, DB: {PG_DB})...")
-        conn = psycopg2.connect(
-            host=PG_HOST,
-            database=PG_DB,
-            user=PG_USER,
-            password=PG_PASS,
-            port=PG_PORT
-        )
-        conn.set_client_encoding('UTF8')
-        cur = conn.cursor()
+        # El orden es importante para respetar las restricciones de clave externa (FK)
+        # Suponiendo que alertas depende de usuarios y medicamentos
+        # Y que auditoria puede depender de usuarios (aunque no haya FK estricta en el DDL proporcionado)
+        
+        cur.execute("DELETE FROM alertas;")
+        print("  - Datos de 'alertas' eliminados.")
+        
+        cur.execute("DELETE FROM auditoria;")
+        print("  - Datos de 'auditoria' eliminados.")
+        
+        cur.execute("DELETE FROM medicamentos;")
+        print("  - Datos de 'medicamentos' eliminados.")
+        
+        cur.execute("DELETE FROM usuarios;")
+        print("  - Datos de 'usuarios' eliminados.")
+        
+        # Si tienes una tabla 'reportes' y necesitas limpiarla:
+        # try:
+        #     cur.execute("DELETE FROM reportes;")
+        #     print("  - Datos de 'reportes' eliminados.")
+        # except psycopg2.ProgrammingError as pe: # Captura si la tabla no existe
+        #     if 'relation "reportes" does not exist' in str(pe):
+        #         print("  - Tabla 'reportes' no encontrada, omitiendo limpieza.")
+        #     else:
+        #         raise # Relanza otras ProgrammingError
+        # except psycopg2.Error as e:
+        #     print(f"  - Error al eliminar datos de 'reportes': {e}")
+        #     conn.rollback()
 
-        # Hashear la contraseña
-        hashed_password = generate_password_hash(ADMIN_CONTRASENA_PLAIN, method='pbkdf2:sha256')
-
-        print(f"Intentando insertar al administrador: {ADMIN_NOMBRE} (Cédula: {ADMIN_CEDULA})")
-
-        # Verificar si el usuario ya existe por cédula o email para evitar conflicto y dar un mensaje más claro
-        cur.execute("SELECT id FROM usuarios WHERE cedula = %s OR email = %s", (ADMIN_CEDULA, ADMIN_EMAIL))
-        existing_user = cur.fetchone()
-
-        if existing_user:
-            print(f"Error: Ya existe un usuario con la cédula '{ADMIN_CEDULA}' o el email '{ADMIN_EMAIL}'. No se insertó el nuevo administrador.")
-            return
-
-        # Insertar el nuevo administrador
-        cur.execute(
-            """
-            INSERT INTO usuarios (nombre, cedula, email, contrasena, rol, estado_usuario)
-            VALUES (%s, %s, %s, %s, %s, %s)
-            RETURNING id;
-            """,
-            (ADMIN_NOMBRE, ADMIN_CEDULA, ADMIN_EMAIL, hashed_password, ADMIN_ROL, ADMIN_ESTADO)
-        )
-        new_admin_id = cur.fetchone()[0]
         conn.commit()
-        print(f"Administrador '{ADMIN_NOMBRE}' insertado con éxito. ID: {new_admin_id}")
+        print("Limpieza de tablas completada.")
+    except psycopg2.Error as e:
+        print(f"Error durante la limpieza de tablas: {e}")
+        conn.rollback()
+        raise # Relanzar para detener la ejecución si la limpieza falla críticamente
+    finally:
+        cur.close()
+
+def insertar_usuarios_lote(conn, usuarios_a_insertar):
+    cur = conn.cursor()
+    print(f"Intentando insertar {len(usuarios_a_insertar)} usuarios...")
+    for usuario in usuarios_a_insertar:
+        try:
+            cur.execute(
+                """
+                INSERT INTO usuarios (nombre, cedula, email, contrasena, rol, estado_usuario)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                ON CONFLICT (cedula) DO NOTHING; 
+                """,
+                (usuario['nombre'], usuario['cedula'], usuario['email'], 
+                 usuario['contrasena'], usuario['rol'], usuario['estado_usuario'])
+            )
+        except psycopg2.Error as e:
+            print(f"Error al insertar usuario {usuario['cedula']}: {e}")
+            conn.rollback() 
+    conn.commit()
+    print(f"Inserción de lote de usuarios completada.")
+    cur.close()
+
+def insertar_medicamentos_lote(conn, medicamentos_a_insertar):
+    cur = conn.cursor()
+    print(f"Intentando insertar/actualizar {len(medicamentos_a_insertar)} medicamentos...")
+    for med in medicamentos_a_insertar:
+        try:
+            cleaned_med = {k: v.replace('\u00A0', ' ') if isinstance(v, str) else v for k, v in med.items()}
+            cur.execute("""
+                INSERT INTO medicamentos (
+                    nombre, descripcion, composicion, sintomas_secundarios,
+                    indicaciones, rango_edad, estado_medicamento
+                )
+                VALUES (
+                    %(nombre)s, %(descripcion)s, %(composicion)s, %(sintomas_secundarios)s,
+                    %(indicaciones)s, %(rango_edad)s, %(estado_medicamento)s
+                )
+                ON CONFLICT (nombre) DO NOTHING;
+            """, cleaned_med)
+        except psycopg2.Error as e:
+            print(f"Error al insertar medicamento {med['nombre']}: {e}")
+            conn.rollback()
+    conn.commit()
+    print("Inserción de lote de medicamentos completada.")
+    cur.close()
+
+def insertar_alertas_lote(conn, num_alertas):
+    cur = conn.cursor()
+    
+    cur.execute("SELECT id FROM usuarios WHERE rol = 'cliente' AND estado_usuario = 'activo'")
+    cliente_ids = [row[0] for row in cur.fetchall()]
+    
+    cur.execute("SELECT id FROM medicamentos WHERE estado_medicamento = 'disponible'")
+    medicamento_ids = [row[0] for row in cur.fetchall()]
+
+    if not cliente_ids or not medicamento_ids:
+        print("No hay suficientes clientes activos o medicamentos disponibles para crear alertas.")
+        cur.close()
+        return
+
+    print(f"Intentando insertar {num_alertas} alertas...")
+    alertas_insertadas = 0
+    for i in range(num_alertas):
+        try:
+            usuario_id = random.choice(cliente_ids)
+            medicamento_id = random.choice(medicamento_ids)
+            dosis = random.choice(dosis_ejemplos)
+            frecuencia = random.choice(frecuencia_ejemplos)
+            
+            start_date = datetime.now() + timedelta(days=random.randint(-10, 10))
+            fecha_inicio = start_date.strftime('%Y-%m-%d')
+            
+            fecha_fin_obj = None
+            if random.choice([True, False]): 
+                fecha_fin_obj = start_date + timedelta(days=random.randint(7, 90))
+                fecha_fin = fecha_fin_obj.strftime('%Y-%m-%d')
+            else:
+                fecha_fin = None
+            
+            hora_preferida_obj = None
+            if random.choice([True, False]): 
+                hora_preferida_obj = f"{random.randint(0,23):02d}:{random.randint(0,59):02d}:00"
+            
+            estado = random.choice(alert_states)
+            if estado == "completada":
+                 if start_date > datetime.now(): # If start is future, make it past
+                     start_date = datetime.now() - timedelta(days=random.randint(10,20))
+                     fecha_inicio = start_date.strftime('%Y-%m-%d')
+                 # Ensure end_date is after start_date but in the past
+                 fecha_fin = (start_date + timedelta(days=random.randint(1,5))).strftime('%Y-%m-%d')
+                 if datetime.strptime(fecha_fin, '%Y-%m-%d') >= datetime.now():
+                     fecha_fin = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
+                     if datetime.strptime(fecha_fin, '%Y-%m-%d') < start_date: # ensure end date is not before start date
+                        fecha_fin = (start_date + timedelta(days=1)).strftime('%Y-%m-%d')
+                        if datetime.strptime(fecha_fin, '%Y-%m-%d') >= datetime.now(): # final check
+                           fecha_fin = None # or set to start_date if it makes sense
+
+
+            cur.execute(
+                """
+                INSERT INTO alertas (usuario_id, medicamento_id, dosis, frecuencia, fecha_inicio, fecha_fin, hora_preferida, estado)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s);
+                """,
+                (usuario_id, medicamento_id, dosis, frecuencia, fecha_inicio, fecha_fin, hora_preferida_obj, estado)
+            )
+            alertas_insertadas +=1
+        except psycopg2.Error as e:
+            print(f"Error al insertar alerta: {e}")
+            conn.rollback() 
+    
+    conn.commit()
+    print(f"{alertas_insertadas} alertas insertadas.")
+    cur.close()
+
+
+def main():
+    conn = None
+    try:
+        conn = get_db_connection()
+        print("Conexión a la base de datos establecida.")
+
+        # --- Limpiar Tablas ---
+        limpiar_tablas(conn)
+
+        # --- Generar e Insertar Administradores ---
+        admins_a_insertar = []
+        for i in range(1, 6): 
+            nombre_admin = f"Admin {random.choice(first_names)} {random.choice(last_names)}"
+            cedula_admin = f"ADM{i:04d}{random.randint(100,999)}"
+            email_admin = f"admin{i}{random.randint(100,999)}@medialert.co"
+            admins_a_insertar.append({
+                'nombre': nombre_admin, 'cedula': cedula_admin, 'email': email_admin,
+                'contrasena': hashed_common_pass, 'rol': 'admin', 'estado_usuario': 'activo'
+            })
+        admins_a_insertar.append({
+            'nombre': "Admin Script Original", 'cedula': "admin999", 'email': "adminscript@medialert.co",
+            'contrasena': generate_password_hash("1234", method='pbkdf2:sha256'), 'rol': 'admin', 'estado_usuario': 'activo'
+        })
+        insertar_usuarios_lote(conn, admins_a_insertar)
+
+        # --- Generar e Insertar Clientes ---
+        clientes_a_insertar = []
+        for i in range(1, 151): 
+            nombre_cliente = f"{random.choice(first_names)} {random.choice(last_names)}"
+            cedula_cliente = f"CL{i:05d}{random.randint(1000,9999)}"
+            email_cliente = f"cliente{i}{random.randint(1000,9999)}@example.com"
+            estado_cliente = random.choices(['activo', 'inactivo'], weights=[0.85, 0.15], k=1)[0]
+            clientes_a_insertar.append({
+                'nombre': nombre_cliente, 'cedula': cedula_cliente, 'email': email_cliente,
+                'contrasena': hashed_common_pass, 'rol': 'cliente', 'estado_usuario': estado_cliente
+            })
+        insertar_usuarios_lote(conn, clientes_a_insertar)
+
+        # --- Insertar Medicamentos ---
+        insertar_medicamentos_lote(conn, lista_medicamentos_a_insertar)
+        
+        # --- Insertar Alertas ---
+        insertar_alertas_lote(conn, 300) 
+
+        print("\nProceso de población de base de datos finalizado con éxito.")
 
     except psycopg2.OperationalError as e:
         print(f"\nError operacional de PostgreSQL: {e}")
         print("Verifica que el servidor PostgreSQL esté corriendo y accesible,")
         print(f"y que la base de datos '{PG_DB}' exista.")
     except psycopg2.Error as e:
-        print(f"\nOcurrió un error de PostgreSQL al insertar el administrador: {e}")
+        print(f"\nOcurrió un error de PostgreSQL durante la población: {e}")
         if conn:
             conn.rollback()
     except Exception as e:
@@ -76,26 +337,15 @@ def insertar_admin():
         if conn:
             conn.rollback()
     finally:
-        if cur:
-            cur.close()
         if conn:
             conn.close()
             print("Conexión a la base de datos cerrada.")
 
 if __name__ == '__main__':
-    print("Iniciando el script para insertar administrador...")
-    # Es recomendable tener un archivo .env en el mismo directorio que este script
-    # o en el directorio raíz del proyecto con las variables PG_HOST, PG_DB, etc.
-    # Ejemplo de .env:
-    # PG_HOST=localhost
-    # PG_DB=medialert
-    # PG_USER=postgres
-    # PG_PASS=tu_password_de_db
-    # PG_PORT=5432
-
+    print("Iniciando el script para poblar la base de datos MediAlert...")
     if not all([PG_HOST, PG_DB, PG_USER, PG_PASS]):
         print("Error: Faltan variables de entorno para la conexión a la base de datos (PG_HOST, PG_DB, PG_USER, PG_PASS).")
         print("Asegúrate de tener un archivo .env configurado o las variables exportadas.")
     else:
-        insertar_admin()
-    print("Proceso de inserción de administrador finalizado.")
+        main()
+    print("Script de población finalizado.")
