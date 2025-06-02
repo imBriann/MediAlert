@@ -28,11 +28,19 @@ async function handleClienteSubmit(e) {
     const url = id ? `/api/admin/clientes/${id}` : '/api/admin/clientes';
     const method = id ? 'PUT' : 'POST';
 
+    const fechaNacimientoValue = document.getElementById('clienteFechaNacimiento').value;
+    const telefonoValue = document.getElementById('clienteTelefono').value;
+    const ciudadValue = document.getElementById('clienteCiudad').value;
+
     const body = {
         nombre: document.getElementById('clienteNombre').value,
         cedula: document.getElementById('clienteCedula').value,
         email: document.getElementById('clienteEmail').value,
-        estado_usuario: document.getElementById('clienteEstadoUsuario').value
+        estado_usuario: document.getElementById('clienteEstadoUsuario').value,
+        // Nuevos campos
+        fecha_nacimiento: fechaNacimientoValue ? fechaNacimientoValue : null, // Enviar null si está vacío
+        telefono: telefonoValue ? telefonoValue : null, // Enviar null si está vacío
+        ciudad: ciudadValue ? ciudadValue : null // Enviar null si está vacío
     };
 
     const contrasena = document.getElementById('clienteContrasena').value;
@@ -41,9 +49,9 @@ async function handleClienteSubmit(e) {
             alert('La contraseña es requerida para nuevos clientes.');
             return;
         }
-        body.contrasena = contrasena; // Backend expects 'contrasena' for new user creation
+        body.contrasena = contrasena; 
     } else if (method === 'PUT' && contrasena) { // Editando y se proveyó nueva contraseña
-        body.contrasena_nueva = contrasena; // Backend expects 'contrasena_nueva' for password change
+        body.contrasena_nueva = contrasena; 
     }
     
     await handleFormSubmit(url, method, body, loadClientes, window.clienteModal, 'Cliente');

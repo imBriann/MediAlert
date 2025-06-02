@@ -25,23 +25,69 @@ function renderErrorRow(tableBody, colspan, error) {
 }
 
 function formatDate(dateString) {
-    if (!dateString) return 'N/A';
+    if (!dateString || String(dateString).trim() === '') {
+        return 'N/A';
+    }
     try {
-        return new Date(dateString).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+        // Asume que dateString es YYYY-MM-DD. Interpretar como UTC.
+        const dateObj = new Date(dateString + 'T00:00:00Z');
+        if (isNaN(dateObj.getTime())) {
+            console.warn("formatDate creó una fecha inválida para el string:", dateString);
+            return dateString; 
+        }
+        const options = { 
+            year: 'numeric', 
+            month: 'short', 
+            day: 'numeric', 
+            timeZone: 'UTC'
+        };
+        return dateObj.toLocaleDateString('es-CO', options);
     } catch (e) {
-        return dateString; // Return original if parsing fails
+        console.error("Error en formatDate para el string:", dateString, e);
+        return dateString; 
+    }
+}
+
+function formatTimestamp(timestampString) {
+    if (!timestampString || String(timestampString).trim() === '') {
+        return 'N/A';
+    }
+    try {
+        // Asume que timestampString es un formato ISO completo que new Date() puede parsear.
+        const dateObj = new Date(timestampString);
+        if (isNaN(dateObj.getTime())) {
+            console.warn("formatTimestamp creó una fecha inválida para el string:", timestampString);
+            return timestampString;
+        }
+        const options = {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            timeZone: 'UTC' // O la zona horaria que prefieras para mostrar. Si los timestamps son UTC en BD.
+                           // Si quieres mostrar en la zona local del usuario, puedes omitir timeZone
+                           // o usar Intl.DateTimeFormat().resolvedOptions().timeZone
+        };
+        return dateObj.toLocaleString('es-CO', options);
+    } catch (e) {
+        console.error("Error en formatTimestamp para el string:", timestampString, e);
+        return timestampString;
     }
 }
 
 function formatTime(timeString) {
     if (!timeString) return 'N/A';
-    // Assuming timeString is in "HH:MM:SS" or "HH:MM" format
-    const [hours, minutes] = timeString.split(':');
-    if (hours && minutes) {
+    const parts = timeString.split(':');
+    if (parts.length >= 2) {
+        const hours = parseInt(parts[0], 10);
+        const minutes = parseInt(parts[1], 10);
+        if (isNaN(hours) || isNaN(minutes)) {
+            return timeString;
+        }
         const d = new Date();
-        d.setHours(parseInt(hours, 10), parseInt(minutes, 10), 0);
-        // Format to HH:MM AM/PM
-        return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+        d.setHours(hours, minutes, 0);
+        return d.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', hour12: true });
     }
     return timeString;
 }
@@ -54,10 +100,10 @@ async function loadClientes() {
         return;
     }
     try {
-        const clientes = await fetchData('/api/admin/clientes?estado=todos', 'Error al cargar clientes');
+        const clientes = await fetchData('/api/admin/clientes?estado=todos&rol=cliente', 'Error al cargar clientes');
         tableBody.innerHTML = '';
         if (!clientes || clientes.length === 0) {
-            tableBody.innerHTML = '<tr><td colspan="5" class="text-center">No hay clientes registrados.</td></tr>';
+            tableBody.innerHTML = '<tr><td colspan="9" class="text-center">No hay clientes registrados.</td></tr>';
         } else {
             clientes.forEach(c => {
                 const estadoBadgeClass = c.estado_usuario === 'activo' ? 'bg-success' : 'bg-danger';
@@ -66,6 +112,10 @@ async function loadClientes() {
                         <td>${c.nombre || 'N/A'}</td>
                         <td>${c.cedula || 'N/A'}</td>
                         <td>${c.email || 'N/A'}</td>
+                        <td>${c.telefono || 'N/A'}</td>
+                        <td>${c.ciudad || 'N/A'}</td>
+                        <td>${formatDate(c.fecha_nacimiento)}</td>
+                        <td>${formatDate(c.fecha_registro)}</td>
                         <td><span class="badge ${estadoBadgeClass}">${c.estado_usuario || 'N/A'}</span></td>
                         <td>
                             <button class="btn btn-sm btn-info btn-edit-cliente" data-id="${c.id}" title="Editar Cliente"><i class="bi bi-pencil-square"></i></button>
@@ -77,7 +127,7 @@ async function loadClientes() {
             });
         }
     } catch (error) {
-        renderErrorRow(tableBody, 5, error);
+        renderErrorRow(tableBody, 9, error);
     }
 }
 
@@ -170,9 +220,9 @@ function getFriendlyTableName(tableName) {
         case 'usuarios': return 'Usuarios/Clientes';
         case 'medicamentos': return 'Medicamentos';
         case 'alertas': return 'Alertas';
-        case 'auditoria': return 'Auditoría'; // For events logged directly to audit without a specific table
+        case 'auditoria': return 'Auditoría'; 
+        case 'reportes_log': return 'Log de Reportes';
         default: 
-            // Heuristic for system-generated audit actions that might not have a table_afectada
             if (tableName.includes('_SESION') || tableName.includes('_LOGIN')) return 'Sesión';
             return tableName.charAt(0).toUpperCase() + tableName.slice(1);
     }
@@ -181,11 +231,20 @@ function getFriendlyTableName(tableName) {
 function formatAuditValue(value) {
     if (value === null || typeof value === 'undefined') return '<em>N/A</em>';
     if (typeof value === 'boolean') return value ? 'Sí' : 'No';
-    if (typeof value === 'string' && (value.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/) || value.match(/^\d{4}-\d{2}-\d{2}$/))) { // ISO Date or DateTime
-        try {
-            return new Date(value).toLocaleString();
-        } catch (e) { /* ignore */ }
+    
+    if (typeof value === 'string') {
+        // Regex para fecha YYYY-MM-DD
+        const dateOnlyRegex = /^\d{4}-\d{2}-\d{2}$/;
+        // Regex para timestamp YYYY-MM-DDTHH:mm:ss o con Z o con offset
+        const timestampRegex = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|([+-]\d{2}:\d{2}))?$/;
+
+        if (timestampRegex.test(value)) {
+            return formatTimestamp(value);
+        } else if (dateOnlyRegex.test(value)) {
+            return formatDate(value);
+        }
     }
+    
     if (typeof value === 'object') return `<pre class="mb-0 small">${JSON.stringify(value, null, 2)}</pre>`;
     return value.toString();
 }
@@ -194,10 +253,10 @@ function formatAuditValue(value) {
 function generateChangeSummary(accion, datosAnteriores, datosNuevos) {
     let pDatosAnteriores = datosAnteriores, pDatosNuevos = datosNuevos;
     if (typeof datosAnteriores === 'string') {
-        try { pDatosAnteriores = JSON.parse(datosAnteriores); } catch (e) { /* ignore parse error if already object or not json */ }
+        try { pDatosAnteriores = JSON.parse(datosAnteriores); } catch (e) { /* ignore */ }
     }
     if (typeof datosNuevos === 'string') {
-        try { pDatosNuevos = JSON.parse(datosNuevos); } catch (e) { /* ignore parse error if already object or not json */ }
+        try { pDatosNuevos = JSON.parse(datosNuevos); } catch (e) { /* ignore */ }
     }
 
     let summary = '<ul class="list-unstyled mb-0 small">';
@@ -240,7 +299,7 @@ function generateChangeSummary(accion, datosAnteriores, datosNuevos) {
                 changesFound = true;
             }
         });
-    } else if (pDatosNuevos && typeof pDatosNuevos === 'object') { // Fallback if only new data is present for an update-like action
+    } else if (pDatosNuevos && typeof pDatosNuevos === 'object') { 
         summary += '<li><strong>Datos Actualizados:</strong></li>';
         for (const key in pDatosNuevos) {
             if (pDatosNuevos.hasOwnProperty(key) && !excludedKeys.includes(key.toLowerCase())) {
@@ -249,7 +308,6 @@ function generateChangeSummary(accion, datosAnteriores, datosNuevos) {
             }
         }
     }
-
 
     if (!changesFound) {
         if (accion && (accion.toUpperCase().includes('SESION') || accion.toUpperCase().includes('LOGIN'))) {
@@ -263,7 +321,7 @@ function generateChangeSummary(accion, datosAnteriores, datosNuevos) {
 }
 
 
-function formatJsonForDisplay(jsonData) { // For "Detalles Adicionales"
+function formatJsonForDisplay(jsonData) { 
     if (jsonData === null || typeof jsonData === 'undefined') return 'N/A';
     if (typeof jsonData === 'string') {
         try { jsonData = JSON.parse(jsonData); } catch (e) { return `<small>${jsonData}</small>`; }
@@ -296,11 +354,9 @@ async function loadAuditoria(filter = '') {
             return;
         }
 
-        logs.forEach((log, index) => {
+        logs.forEach((log) => {
             const row = tableBody.insertRow();
-            // row.className = index % 2 === 0 ? 'table-light' : 'table-secondary'; // Bootstrap default hover is often enough
-
-            row.insertCell().innerHTML = `<small>${log.fecha_hora ? new Date(log.fecha_hora).toLocaleString() : 'N/A'}</small>`;
+            row.insertCell().innerHTML = `<small>${formatTimestamp(log.fecha_hora)}</small>`;
             row.insertCell().innerHTML = `<small>${log.nombre_usuario_app || 'Sistema'}</small>`;
             row.insertCell().innerHTML = `<small>${log.accion ? log.accion.replace(/_/g, ' ') : 'N/A'}</small>`;
             row.insertCell().innerHTML = `<small>${getFriendlyTableName(log.tabla_afectada)}</small>`;
@@ -313,11 +369,10 @@ async function loadAuditoria(filter = '') {
             detallesAdicionalesCell.innerHTML = formatJsonForDisplay(log.detalles_adicionales);
         });
     } catch (error) {
-        renderErrorRow(tableBody, 7, error); // Updated colspan to 7
+        renderErrorRow(tableBody, 7, error); 
     }
 }
 
-// ... (fetchData y otras funciones existentes) ...
 
 async function loadReportesLog() {
     const tableBody = document.getElementById('reportes-log-table-body');
@@ -327,7 +382,7 @@ async function loadReportesLog() {
     }
 
     try {
-        const logs = await fetchData('/api/admin/reportes_log', 'Error al cargar historial de reportes'); //
+        const logs = await fetchData('/api/admin/reportes_log', 'Error al cargar historial de reportes'); 
         tableBody.innerHTML = '';
 
         if (!logs || logs.length === 0) {
@@ -337,25 +392,21 @@ async function loadReportesLog() {
 
         logs.forEach(log => {
             const row = tableBody.insertRow();
-            row.insertCell().textContent = new Date(log.fecha_generacion).toLocaleString();
+            row.insertCell().textContent = formatTimestamp(log.fecha_generacion);
             row.insertCell().textContent = log.nombre_reporte || 'N/A';
-            // tipo_reporte might be more technical, nombre_reporte is user-friendly
             row.insertCell().textContent = log.tipo_reporte ? log.tipo_reporte.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) : 'N/A';
             row.insertCell().textContent = log.generado_por_nombre || 'Desconocido';
             
             const actionsCell = row.insertCell();
-            const downloadButton = document.createElement('a'); // Changed to <a> for direct link
-            downloadButton.className = 'btn btn-sm btn-outline-primary bi bi-cloud-download'; // Changed icon
+            const downloadButton = document.createElement('a'); 
+            downloadButton.className = 'btn btn-sm btn-outline-primary bi bi-cloud-download'; 
             downloadButton.title = 'Descargar Reporte Almacenado';
-            downloadButton.href = `/api/admin/reportes/download/${log.id}`; // Link to the download endpoint
-            // downloadButton.target = '_blank'; // Optional: open in new tab if browser doesn't force download
+            downloadButton.href = `/api/admin/reportes/download/${log.id}`; 
             
             actionsCell.appendChild(downloadButton);
         });
 
     } catch (error) {
-        renderErrorRow(tableBody, 5, error); //
+        renderErrorRow(tableBody, 5, error); 
     }
 }
-
-// ... (resto de funciones) ...

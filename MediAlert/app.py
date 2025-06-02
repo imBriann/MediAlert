@@ -3,21 +3,21 @@ import psycopg2
 from psycopg2.extras import RealDictCursor, Json # Para manejar JSONB
 from flask_cors import CORS
 from functools import wraps
-import json
+import json # Aunque Json de psycopg2.extras es más usado para la BD
 from werkzeug.security import generate_password_hash, check_password_hash # Para contraseñas
 import os
 import logging
 from dotenv import load_dotenv
-from datetime import date, time  # Importar date y time
+from datetime import date, time, datetime # Importar datetime para fecha_registro
 import uuid  # Para generar nombres únicos
 from werkzeug.utils import secure_filename  # Para asegurar nombres de archivo
 
-# Load environment variables from .env file
+# Cargar variables de entorno desde el archivo .env
 load_dotenv()
 
 app = Flask(__name__, static_url_path='/static', static_folder='static', template_folder='templates')
 CORS(app, supports_credentials=True, resources={r"/api/*": {"origins": "*"}}) # Ajusta origins según necesidad
-app.secret_key = os.getenv('FLASK_SECRET_KEY')
+app.secret_key = os.getenv('FLASK_SECRET_KEY', 'tu_llave_secreta_por_defecto_aqui') # Es mejor tener una llave por defecto
 
 # --- Configuración de Conexión a la Base de Datos ---
 PG_HOST = os.getenv('PG_HOST')
@@ -30,7 +30,7 @@ PG_PORT = os.getenv('PG_PORT', '5432')
 INSTANCE_FOLDER_PATH = os.path.join(app.root_path, '..', 'instance')
 REPORTS_STORAGE_PATH = os.path.join(INSTANCE_FOLDER_PATH, 'generated_reports')
 if not os.path.exists(REPORTS_STORAGE_PATH):
-    os.makedirs(REPORTS_STORAGE_PATH)
+    os.makedirs(REPORTS_STORAGE_PATH, exist_ok=True) # exist_ok=True para no fallar si ya existe
 
 app.config['REPORTS_STORAGE_PATH'] = REPORTS_STORAGE_PATH
 app.config['ALLOWED_EXTENSIONS'] = {'pdf'}
@@ -84,17 +84,17 @@ def registrar_auditoria_aplicacion(accion, tabla_afectada=None, registro_id=None
     sp_registrar_evento_auditoria.
     Los datos (anteriores, nuevos, adicionales) deben ser diccionarios de Python.
     """
-    def serialize_dates(obj):
-        """Recursively convert date objects to strings in a dictionary."""
+    def serialize_data(obj):
+        """Convierte recursivamente objetos date, time, y datetime a strings ISO en un diccionario o lista."""
         if isinstance(obj, dict):
-            return {k: serialize_dates(v) for k, v in obj.items()}
+            return {k: serialize_data(v) for k, v in obj.items()}
         elif isinstance(obj, list):
-            return [serialize_dates(i) for i in obj]
-        elif isinstance(obj, (date, time)):
+            return [serialize_data(i) for i in obj]
+        elif isinstance(obj, (datetime, date, time)):
             return obj.isoformat()
         return obj
 
-    app_user_id = session.get('user_id')  # Puede ser None si la acción no está ligada a una sesión de usuario
+    app_user_id = session.get('user_id')
 
     conn = None
     cur = None
@@ -102,11 +102,9 @@ def registrar_auditoria_aplicacion(accion, tabla_afectada=None, registro_id=None
         conn = get_db_connection()
         cur = conn.cursor()
 
-        # Convertir diccionarios de Python a objetos Json para psycopg2
-        # Esto asegura que se manejen correctamente como JSONB en PostgreSQL
-        p_datos_anteriores = Json(serialize_dates(datos_anteriores)) if datos_anteriores is not None else None
-        p_datos_nuevos = Json(serialize_dates(datos_nuevos)) if datos_nuevos is not None else None
-        p_detalles_adicionales = Json(serialize_dates(detalles_adicionales)) if detalles_adicionales is not None else None
+        p_datos_anteriores = Json(serialize_data(datos_anteriores)) if datos_anteriores is not None else None
+        p_datos_nuevos = Json(serialize_data(datos_nuevos)) if datos_nuevos is not None else None
+        p_detalles_adicionales = Json(serialize_data(detalles_adicionales)) if detalles_adicionales is not None else None
 
         cur.execute(
             "SELECT sp_registrar_evento_auditoria(%s, %s, %s, %s, %s, %s, %s);",
@@ -173,7 +171,7 @@ def login():
             conn.close()
 
 @app.route('/api/logout', methods=['POST'])
-@login_required # Asegura que solo usuarios logueados puedan hacer logout
+@login_required 
 def logout():
     try:
         usuario_nombre = session.get('nombre', 'Desconocido')
@@ -193,7 +191,6 @@ def logout():
 @app.route('/api/session_check', methods=['GET'])
 @login_required
 def session_check():
-    # El decorador @login_required ya maneja si no hay sesión.
     return jsonify({
         'user_id': session.get('user_id'),
         'nombre': session.get('nombre'),
@@ -201,37 +198,33 @@ def session_check():
     })
 
 # --- API: GESTIÓN DE CLIENTES (Usuarios con rol 'cliente') ---
-# Snippet from MediAlert/app.py
-
-@app.route('/api/admin/clientes', methods=['GET', 'POST']) # Path remains for client management, but GET can be more versatile
+@app.route('/api/admin/clientes', methods=['GET', 'POST'])
 @admin_required
 def manage_clientes():
     conn = None
     try:
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
-        
         admin_id_actual = session.get('user_id')
 
         if request.method == 'GET':
-            estado_filtro = request.args.get('estado', None) # Allow no default to fetch all if not specified
-            rol_filtro = request.args.get('rol', None) # Allow fetching specific roles or all
+            estado_filtro = request.args.get('estado', None)
+            rol_filtro = request.args.get('rol', None)
 
-            query_parts = ["SELECT id, nombre, cedula, email, rol, estado_usuario FROM usuarios"]
+            # Incluir los nuevos campos en la selección
+            query_parts = ["SELECT id, nombre, cedula, email, rol, estado_usuario, fecha_nacimiento, telefono, ciudad, fecha_registro FROM usuarios"]
             conditions = []
             params = []
 
             if rol_filtro:
                 if rol_filtro == 'cliente':
                     conditions.append("rol = 'cliente'")
-                elif rol_filtro == 'admin':
+                elif rol_filtro == 'admin': # Si se quiere listar admins también por esta ruta
                     conditions.append("rol = 'admin'")
-                # Not adding rol_filtro to params as it's directly in query string for safety
             
-            if estado_filtro:
-                if estado_filtro != 'todos': # 'todos' means no estado filter
-                    conditions.append("estado_usuario = %s")
-                    params.append(estado_filtro)
+            if estado_filtro and estado_filtro != 'todos':
+                conditions.append("estado_usuario = %s")
+                params.append(estado_filtro)
             
             if conditions:
                 query_parts.append("WHERE " + " AND ".join(conditions))
@@ -243,38 +236,56 @@ def manage_clientes():
             users = cur.fetchall()
             return jsonify(users)
 
-        if request.method == 'POST': # This part remains specific to creating 'cliente' role users
+        if request.method == 'POST':
             data = request.json
             nombre = data.get('nombre')
             cedula = data.get('cedula')
             email = data.get('email')
             contrasena_plain = data.get('contrasena')
-            rol_nuevo_usuario = 'cliente'  # Hardcoded for this POST through /api/admin/clientes
+            # Nuevos campos
+            fecha_nacimiento = data.get('fecha_nacimiento') # Puede ser None
+            telefono = data.get('telefono') # Puede ser None
+            ciudad = data.get('ciudad') # Puede ser None
+            
+            rol_nuevo_usuario = 'cliente'
             estado_nuevo_usuario = 'activo'
+            fecha_registro_actual = datetime.now().date() # Fecha de registro automática
 
             if not all([nombre, cedula, email, contrasena_plain]):
                 return jsonify({'error': 'Nombre, cédula, email y contraseña son requeridos.'}), 400
+            
+            # Validar formato de fecha_nacimiento si se provee
+            if fecha_nacimiento:
+                try:
+                    datetime.strptime(fecha_nacimiento, '%Y-%m-%d')
+                except ValueError:
+                    return jsonify({'error': 'Formato de fecha de nacimiento inválido. Use YYYY-MM-DD.'}), 400
 
             hashed_password = generate_password_hash(contrasena_plain)
             
             try:
                 cur.execute(
                     """
-                    INSERT INTO usuarios (nombre, cedula, email, contrasena, rol, estado_usuario) 
-                    VALUES (%s, %s, %s, %s, %s, %s) RETURNING id
+                    INSERT INTO usuarios (nombre, cedula, email, contrasena, rol, estado_usuario, 
+                                          fecha_nacimiento, telefono, ciudad, fecha_registro) 
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id
                     """,
-                    (nombre, cedula, email, hashed_password, rol_nuevo_usuario, estado_nuevo_usuario)
+                    (nombre, cedula, email, hashed_password, rol_nuevo_usuario, estado_nuevo_usuario,
+                     fecha_nacimiento, telefono, ciudad, fecha_registro_actual)
                 )
                 new_id = cur.fetchone()['id']
                 conn.commit()
                 
-                # The audit trigger in the DB handles the direct INSERT.
-                # Application level audit might be more specific.
-                registrar_auditoria_aplicacion( #
+                datos_nuevos_audit = {
+                    'nombre': nombre, 'cedula': cedula, 'email': email, 'rol': rol_nuevo_usuario, 
+                    'estado_usuario': estado_nuevo_usuario, 'fecha_nacimiento': fecha_nacimiento,
+                    'telefono': telefono, 'ciudad': ciudad, 'fecha_registro': fecha_registro_actual.isoformat()
+                }
+                registrar_auditoria_aplicacion(
                     'CREACION_CLIENTE', 
                     tabla_afectada='usuarios', 
                     registro_id=str(new_id),
-                    datos_nuevos={'nombre': nombre, 'cedula': cedula, 'email': email, 'rol': rol_nuevo_usuario, 'estado_usuario': estado_nuevo_usuario},
+                    datos_nuevos=datos_nuevos_audit,
                     detalles_adicionales={'creado_por_admin_id': admin_id_actual}
                 )
                 return jsonify({'message': 'Cliente creado con éxito.', 'id': new_id}), 201
@@ -297,8 +308,7 @@ def manage_clientes():
         if conn:
             conn.close()
 
-
-@app.route('/api/admin/clientes/<int:uid>', methods=['GET', 'PUT']) # DELETE se maneja con cambio de estado
+@app.route('/api/admin/clientes/<int:uid>', methods=['GET', 'PUT'])
 @admin_required
 def manage_single_cliente(uid):
     conn = None
@@ -307,66 +317,88 @@ def manage_single_cliente(uid):
         cur = conn.cursor(cursor_factory=RealDictCursor)
         admin_id_actual = session.get('user_id')
 
+        # Obtener datos actuales para GET y para auditoría en PUT
+        cur.execute("SELECT id, nombre, cedula, email, rol, estado_usuario, fecha_nacimiento, telefono, ciudad, fecha_registro FROM usuarios WHERE id = %s", (uid,)) # Asumimos que uid puede ser admin o cliente aquí
+        current_user_data = cur.fetchone()
+
+        if not current_user_data:
+            return jsonify({'error': 'Usuario no encontrado.'}), 404
+        
+        # Solo permitir la gestión si el rol es 'cliente' a través de esta ruta específica
+        # (o ajustar si se quiere que esta ruta también gestione admins)
+        if current_user_data['rol'] != 'cliente':
+             return jsonify({'error': 'Esta ruta es solo para gestionar clientes.'}), 403
+
+
         if request.method == 'GET':
-            cur.execute("SELECT id, nombre, cedula, email, estado_usuario FROM usuarios WHERE id = %s AND rol='cliente'", (uid,))
-            cliente = cur.fetchone()
-            if not cliente:
-                return jsonify({'error': 'Cliente no encontrado.'}), 404
-            return jsonify(cliente)
+            return jsonify(current_user_data)
             
-        if request.method == 'PUT': # Para editar datos o para "eliminar" (cambiar estado)
+        if request.method == 'PUT':
             data = request.json
             
-            # Obtener datos actuales para auditoría
-            cur.execute("SELECT * FROM usuarios WHERE id = %s AND rol='cliente'", (uid,))
-            old_cliente_data = cur.fetchone()
-            if not old_cliente_data:
-                return jsonify({'error': 'Cliente no encontrado para actualizar.'}), 404
-
-            nombre = data.get('nombre', old_cliente_data['nombre'])
-            cedula = data.get('cedula', old_cliente_data['cedula'])
-            email = data.get('email', old_cliente_data['email'])
-            estado_usuario = data.get('estado_usuario', old_cliente_data['estado_usuario']) # Para soft delete
+            nombre = data.get('nombre', current_user_data['nombre'])
+            cedula = data.get('cedula', current_user_data['cedula'])
+            email = data.get('email', current_user_data['email'])
+            estado_usuario = data.get('estado_usuario', current_user_data['estado_usuario'])
+            
+            # Nuevos campos
+            fecha_nacimiento = data.get('fecha_nacimiento', current_user_data['fecha_nacimiento'])
+            if fecha_nacimiento == '': fecha_nacimiento = None # Tratar string vacío como NULL
+            telefono = data.get('telefono', current_user_data['telefono'])
+            if telefono == '': telefono = None
+            ciudad = data.get('ciudad', current_user_data['ciudad'])
+            if ciudad == '': ciudad = None
+            # fecha_registro no se actualiza manualmente
 
             if estado_usuario not in ['activo', 'inactivo']:
                 return jsonify({'error': 'Valor de estado_usuario no válido.'}), 400
             
-            # Si se provee una nueva contraseña, hashearla. Si no, no se actualiza.
+            if fecha_nacimiento:
+                try:
+                    datetime.strptime(fecha_nacimiento, '%Y-%m-%d')
+                except ValueError:
+                    return jsonify({'error': 'Formato de fecha de nacimiento inválido. Use YYYY-MM-DD.'}), 400
+
             new_password_plain = data.get('contrasena_nueva')
-            sql_update = "UPDATE usuarios SET nombre=%s, cedula=%s, email=%s, estado_usuario=%s"
-            params = [nombre, cedula, email, estado_usuario]
+            sql_update_parts = ["nombre=%s", "cedula=%s", "email=%s", "estado_usuario=%s", 
+                                "fecha_nacimiento=%s", "telefono=%s", "ciudad=%s"]
+            params = [nombre, cedula, email, estado_usuario, fecha_nacimiento, telefono, ciudad]
             
             if new_password_plain:
                 hashed_new_password = generate_password_hash(new_password_plain)
-                sql_update += ", contrasena=%s"
+                sql_update_parts.append("contrasena=%s")
                 params.append(hashed_new_password)
             
-            sql_update += " WHERE id=%s AND rol='cliente'"
+            sql_update = f"UPDATE usuarios SET {', '.join(sql_update_parts)} WHERE id=%s AND rol='cliente'"
             params.append(uid)
 
             try:
                 cur.execute(sql_update, tuple(params))
                 conn.commit()
                 
-                # Auditoría de aplicación. El trigger de BD también registrará el UPDATE.
                 accion_audit = 'EDICION_CLIENTE'
-                if old_cliente_data['estado_usuario'] == 'activo' and estado_usuario == 'inactivo':
+                if current_user_data['estado_usuario'] == 'activo' and estado_usuario == 'inactivo':
                     accion_audit = 'DESACTIVACION_CLIENTE'
-                elif old_cliente_data['estado_usuario'] == 'inactivo' and estado_usuario == 'activo':
+                elif current_user_data['estado_usuario'] == 'inactivo' and estado_usuario == 'activo':
                      accion_audit = 'REACTIVACION_CLIENTE'
+
+                datos_nuevos_audit = {
+                    'nombre': nombre, 'cedula': cedula, 'email': email, 'estado_usuario': estado_usuario,
+                    'fecha_nacimiento': fecha_nacimiento, 'telefono': telefono, 'ciudad': ciudad
+                }
+                if new_password_plain: datos_nuevos_audit['contrasena'] = "********"
 
                 registrar_auditoria_aplicacion(
                     accion_audit, 
                     tabla_afectada='usuarios', 
                     registro_id=str(uid),
-                    datos_anteriores=dict(old_cliente_data), # Convertir RealDictRow a dict
-                    datos_nuevos={'nombre': nombre, 'cedula': cedula, 'email': email, 'estado_usuario': estado_usuario},
+                    datos_anteriores=dict(current_user_data),
+                    datos_nuevos=datos_nuevos_audit,
                     detalles_adicionales={'actualizado_por_admin_id': admin_id_actual}
                 )
                 return jsonify({'message': f'Cliente {uid} actualizado con éxito.'})
             except psycopg2.IntegrityError as e:
                 conn.rollback()
-                # Manejar errores de unicidad para cédula y email
                 return jsonify({'error': f'Error de integridad al actualizar: {e}'}), 409
             except psycopg2.Error as e:
                 conn.rollback()
@@ -388,7 +420,12 @@ def get_configuracion_usuario():
     try:
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute("SELECT nombre, email, rol FROM usuarios WHERE id = %s", (user_id,))
+        # Devolver también los nuevos campos si el usuario es cliente
+        cur.execute("""
+            SELECT id, nombre, cedula, email, rol, estado_usuario, 
+                   fecha_nacimiento, telefono, ciudad, fecha_registro 
+            FROM usuarios WHERE id = %s
+        """, (user_id,))
         user_data = cur.fetchone()
         if not user_data:
             return jsonify({'error': 'Usuario no encontrado.'}), 404
@@ -415,7 +452,7 @@ def cambiar_contrasena_usuario():
     if contrasena_nueva != contrasena_nueva_confirmacion:
         return jsonify({'error': 'La nueva contraseña y su confirmación no coinciden.'}), 400
     
-    if len(contrasena_nueva) < 6: # Ejemplo de validación simple de longitud
+    if len(contrasena_nueva) < 6: 
         return jsonify({'error': 'La nueva contraseña debe tener al menos 6 caracteres.'}), 400
 
     conn = None
@@ -423,7 +460,6 @@ def cambiar_contrasena_usuario():
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
         
-        # Verificar contraseña actual
         cur.execute("SELECT contrasena as hashed_password FROM usuarios WHERE id = %s", (user_id,))
         user = cur.fetchone()
         if not user or not check_password_hash(user['hashed_password'], contrasena_actual):
@@ -443,8 +479,8 @@ def cambiar_contrasena_usuario():
             'CAMBIO_CONTRASENA_EXITOSO',
             tabla_afectada='usuarios',
             registro_id=str(user_id),
-            datos_anteriores={'contrasena': '********'}, # No loguear hash antiguo
-            datos_nuevos={'contrasena': '********'}   # No loguear hash nuevo
+            datos_anteriores={'contrasena': '********'}, 
+            datos_nuevos={'contrasena': '********'}
         )
         return jsonify({'message': 'Contraseña actualizada con éxito.'})
         
@@ -488,16 +524,14 @@ def manage_medicamentos():
         
         if request.method == 'POST':
             data = request.json
-            # Extraer todos los campos
             nombre = data.get('nombre')
             descripcion = data.get('descripcion')
             composicion = data.get('composicion')
             sintomas_secundarios = data.get('sintomas_secundarios')
             indicaciones = data.get('indicaciones')
             rango_edad = data.get('rango_edad')
-            # estado_medicamento por defecto es 'disponible' en la BD
 
-            if not nombre: # Nombre es el campo más crítico
+            if not nombre:
                 return jsonify({'error': 'El nombre del medicamento es requerido.'}), 400
             
             try:
@@ -514,11 +548,11 @@ def manage_medicamentos():
                     'CREACION_MEDICAMENTO', 
                     tabla_afectada='medicamentos', 
                     registro_id=str(new_id),
-                    datos_nuevos=data, # Enviar todos los datos recibidos
+                    datos_nuevos=data,
                     detalles_adicionales={'creado_por_admin_id': admin_id_actual}
                 )
                 return jsonify({'message': 'Medicamento creado con éxito.', 'id': new_id}), 201
-            except psycopg2.IntegrityError as e: # Nombre duplicado
+            except psycopg2.IntegrityError as e:
                 conn.rollback()
                 return jsonify({'error': f'El medicamento "{nombre}" ya existe.'}), 409
             except psycopg2.Error as e:
@@ -532,7 +566,7 @@ def manage_medicamentos():
         if conn:
             conn.close()
 
-@app.route('/api/admin/medicamentos/<int:mid>', methods=['GET','PUT']) # DELETE se maneja con cambio de estado
+@app.route('/api/admin/medicamentos/<int:mid>', methods=['GET','PUT'])
 @admin_required
 def manage_single_medicamento(mid):
     conn = None
@@ -556,7 +590,6 @@ def manage_single_medicamento(mid):
             if not old_med_data:
                 return jsonify({'error': 'Medicamento no encontrado para actualizar.'}), 404
 
-            # Actualizar todos los campos si se proveen
             nombre = data.get('nombre', old_med_data['nombre'])
             descripcion = data.get('descripcion', old_med_data['descripcion'])
             composicion = data.get('composicion', old_med_data['composicion'])
@@ -590,11 +623,11 @@ def manage_single_medicamento(mid):
                     tabla_afectada='medicamentos', 
                     registro_id=str(mid),
                     datos_anteriores=dict(old_med_data),
-                    datos_nuevos=data, # Enviar todos los datos recibidos para la actualización
+                    datos_nuevos=data,
                     detalles_adicionales={'actualizado_por_admin_id': admin_id_actual}
                 )
                 return jsonify({'message': f'Medicamento {mid} actualizado con éxito.'})
-            except psycopg2.IntegrityError as e: # Nombre duplicado
+            except psycopg2.IntegrityError as e:
                 conn.rollback()
                 return jsonify({'error': f'El nombre de medicamento "{nombre}" ya existe para otro ID.'}), 409
             except psycopg2.Error as e:
@@ -619,7 +652,6 @@ def manage_alertas_admin():
         admin_id_actual = session.get('user_id')
 
         if request.method == 'GET':
-            # Mostrar todas las alertas, indicando estado de usuario y medicamento
             cur.execute("""
                 SELECT 
                     a.id, a.usuario_id, u.nombre as cliente_nombre, u.estado_usuario,
@@ -631,12 +663,9 @@ def manage_alertas_admin():
                 ORDER BY u.nombre, m.nombre, a.fecha_inicio
             """)
             alertas = cur.fetchall()
-
-            # Convertir objetos de tipo `time` a cadenas
             for alerta in alertas:
                 if isinstance(alerta.get('hora_preferida'), (time,)):
                     alerta['hora_preferida'] = alerta['hora_preferida'].strftime('%H:%M:%S')
-
             return jsonify(alertas)
 
         if request.method == 'POST':
@@ -648,13 +677,11 @@ def manage_alertas_admin():
             if not all([usuario_id, medicamento_id, fecha_inicio]):
                 return jsonify({'error': 'ID de usuario, ID de medicamento y fecha de inicio son requeridos.'}), 400
 
-            # Verificar que el usuario sea cliente y esté activo
             cur.execute("SELECT estado_usuario FROM usuarios WHERE id = %s AND rol = 'cliente'", (usuario_id,))
             user_check = cur.fetchone()
             if not user_check or user_check['estado_usuario'] != 'activo':
                 return jsonify({'error': 'El usuario seleccionado no es un cliente activo.'}), 400
             
-            # Verificar que el medicamento esté disponible
             cur.execute("SELECT estado_medicamento FROM medicamentos WHERE id = %s", (medicamento_id,))
             med_check = cur.fetchone()
             if not med_check or med_check['estado_medicamento'] != 'disponible':
@@ -664,7 +691,7 @@ def manage_alertas_admin():
             frecuencia = data.get('frecuencia')
             fecha_fin = data.get('fecha_fin') if data.get('fecha_fin') else None
             hora_preferida = data.get('hora_preferida') if data.get('hora_preferida') else None
-            estado_alerta = data.get('estado', 'activa') # Por defecto 'activa'
+            estado_alerta = data.get('estado', 'activa')
 
             if estado_alerta not in ['activa', 'inactiva', 'completada', 'fallida']:
                 return jsonify({'error': 'Valor de estado de alerta no válido.'}), 400
@@ -712,11 +739,8 @@ def manage_single_alerta_admin(alerta_id):
             alerta = cur.fetchone()
             if not alerta:
                 return jsonify({'error': 'Alerta no encontrada.'}), 404
-
-            # Convertir objetos de tipo `time` a cadenas
             if isinstance(alerta.get('hora_preferida'), (time,)):
                 alerta['hora_preferida'] = alerta['hora_preferida'].strftime('%H:%M:%S')
-
             return jsonify(alerta)
 
         if request.method == 'PUT':
@@ -726,20 +750,13 @@ def manage_single_alerta_admin(alerta_id):
             if not old_alerta_data:
                 return jsonify({'error': 'Alerta no encontrada para actualizar.'}), 404
 
-            # Validar campos como en la creación
             usuario_id = data.get('usuario_id', old_alerta_data['usuario_id'])
             medicamento_id = data.get('medicamento_id', old_alerta_data['medicamento_id'])
-            
-            # Verificar usuario y medicamento si cambian o si se actualiza una alerta inactiva
-            # (Podría ser más complejo si se permite cambiar usuario/medicamento de una alerta)
-            # Por simplicidad, asumimos que usuario_id y medicamento_id no cambian frecuentemente en un PUT,
-            # o que si cambian, la validación de activo/disponible es importante.
-
             dosis = data.get('dosis', old_alerta_data['dosis'])
             frecuencia = data.get('frecuencia', old_alerta_data['frecuencia'])
             fecha_inicio = data.get('fecha_inicio', old_alerta_data['fecha_inicio'])
             fecha_fin = data.get('fecha_fin', old_alerta_data['fecha_fin'])
-            if fecha_fin == '': fecha_fin = None # Tratar string vacío como NULL
+            if fecha_fin == '': fecha_fin = None
             hora_preferida = data.get('hora_preferida', old_alerta_data['hora_preferida'])
             if hora_preferida == '': hora_preferida = None
             estado = data.get('estado', old_alerta_data['estado'])
@@ -771,7 +788,7 @@ def manage_single_alerta_admin(alerta_id):
                 app.logger.error(f"Error de BD al actualizar alerta {alerta_id}: {e}")
                 return jsonify({'error': f'Error de base de datos al actualizar alerta {alerta_id}.'}), 500
 
-        if request.method == 'DELETE': # Borrado físico de alertas permitido
+        if request.method == 'DELETE':
             cur.execute("SELECT * FROM alertas WHERE id = %s", (alerta_id,))
             old_alerta_data = cur.fetchone()
             if not old_alerta_data:
@@ -798,10 +815,9 @@ def manage_single_alerta_admin(alerta_id):
         if conn:
             conn.close()
 
-
 # --- API: VISTA DEL CLIENTE ---
 @app.route('/api/cliente/mis_alertas', methods=['GET'])
-@login_required # Solo usuarios logueados
+@login_required
 def get_mis_alertas_cliente():
     if session.get('rol') != 'cliente':
         return jsonify({'error': 'Acceso denegado. Esta vista es solo para clientes.'}), 403
@@ -811,8 +827,6 @@ def get_mis_alertas_cliente():
     try:
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
-        # Mostrar solo alertas activas para el cliente, de medicamentos disponibles
-        # y donde el propio cliente esté activo (aunque el login ya lo filtraría)
         cur.execute("""
             SELECT 
                 a.id, m.nombre as medicamento_nombre, a.dosis, a.frecuencia, 
@@ -835,9 +849,7 @@ def get_mis_alertas_cliente():
         if conn:
             conn.close()
 
-
 # --- API: AUDITORÍA (Solo Admin) ---
-# You might also want a limit parameter for the auditoria endpoint for PDF generation:
 @app.route('/api/admin/auditoria', methods=['GET'])
 @admin_required
 def get_auditoria_logs():
@@ -847,23 +859,17 @@ def get_auditoria_logs():
         cur = conn.cursor(cursor_factory=RealDictCursor)
 
         tabla_filtro = request.args.get('tabla', None)
-        limit = request.args.get('limit', None) # New limit parameter
+        limit = request.args.get('limit', None)
 
         query = """
             SELECT 
-                aud.id, 
-                aud.fecha_hora,
-                u_app.nombre as nombre_usuario_app,
-                aud.usuario_db as usuario_postgres,
-                aud.accion, 
-                aud.tabla_afectada, 
-                aud.registro_id_afectado,
-                aud.datos_anteriores, 
-                aud.datos_nuevos, 
+                aud.id, aud.fecha_hora, u_app.nombre as nombre_usuario_app,
+                aud.usuario_db as usuario_postgres, aud.accion, aud.tabla_afectada, 
+                aud.registro_id_afectado, aud.datos_anteriores, aud.datos_nuevos, 
                 aud.detalles_adicionales
             FROM auditoria aud
             LEFT JOIN usuarios u_app ON aud.usuario_id_app = u_app.id
-        """ #
+        """
         params = []
 
         if tabla_filtro:
@@ -878,7 +884,7 @@ def get_auditoria_logs():
                 params.append(int(limit))
             except ValueError:
                 app.logger.warn("Invalid limit parameter for auditoria endpoint.")
-                pass # Ignore invalid limit
+                pass
 
         cur.execute(query, tuple(params))
         logs = cur.fetchall()
@@ -890,6 +896,7 @@ def get_auditoria_logs():
         if conn:
             conn.close()
             
+# --- API: REPORTES LOG Y UPLOAD/DOWNLOAD ---
 @app.route('/api/admin/reportes_log', methods=['GET', 'POST'])
 @admin_required
 def manage_reportes_log():
@@ -987,7 +994,11 @@ def download_report_pdf(log_id):
             return jsonify({'error': 'Registro de reporte no encontrado.'}), 404
             
         pdf_filename = report_log['pdf_filename']
-        download_name = secure_filename(f"{report_log['nombre_reporte'].replace(' ', '_')}_{pdf_filename[:8]}.pdf")
+        # Crear un nombre de archivo más descriptivo para la descarga
+        base_name = report_log['nombre_reporte'].replace(' ', '_').replace('/', '-')
+        timestamp_part = pdf_filename.split('.')[0][:8] # Tomar parte del UUID para unicidad si es necesario
+        download_name = secure_filename(f"{base_name}_{timestamp_part}.pdf")
+
 
         reports_dir = app.config['REPORTS_STORAGE_PATH']
         
@@ -1013,42 +1024,54 @@ def download_report_pdf(log_id):
 # --- Rutas para servir los archivos HTML ---
 @app.route('/')
 def index():
+    # Si hay sesión, redirigir a la página correspondiente, sino al login
+    if 'user_id' in session:
+        if session.get('rol') == 'admin':
+            return render_template('admin.html')
+        elif session.get('rol') == 'cliente':
+            return render_template('client.html')
     return render_template('login.html')
 
 @app.route('/favicon.ico')
 def favicon():
-    return '', 204
+    return send_from_directory(os.path.join(app.root_path, 'static', 'img'),
+                               'favicon.ico', mimetype='image/vnd.microsoft.icon')
+
 
 @app.route('/<path:filename>')
 def serve_html_or_static(filename):
     # Servir archivos HTML específicos desde la raíz de templates
-    if filename in ['admin.html', 'client.html', 'login.html', 'configuracion.html']: # Añade otros HTML raíz aquí
-        # Verificar sesión para páginas protegidas
-        if filename in ['admin.html', 'client.html', 'configuracion.html'] and 'user_id' not in session:
-            return render_template('login.html') # Redirigir a login si no hay sesión
+    html_files = ['admin.html', 'client.html', 'login.html', 'configuracion.html']
+    if filename in html_files:
+        if filename != 'login.html' and 'user_id' not in session:
+            return render_template('login.html') 
+        
+        # Redirección específica si ya está logueado e intenta ir a login.html
+        if filename == 'login.html' and 'user_id' in session:
+            if session.get('rol') == 'admin':
+                return render_template('admin.html')
+            elif session.get('rol') == 'cliente':
+                return render_template('client.html')
+        
         try:
             return render_template(filename)
-        except Exception as e: # jinja2.exceptions.TemplateNotFound
+        except Exception as e: 
             app.logger.warn(f"Template HTML no encontrado: {filename}, error: {e}")
-            # Podrías intentar servir desde static si no es un template conocido
-            # o simplemente devolver 404.
-            pass # Dejar que intente servir desde static
+            pass 
     
     # Intentar servir como archivo estático (CSS, JS, IMG)
     try:
         return send_from_directory(app.static_folder, filename)
-    except Exception as e: # werkzeug.exceptions.NotFound
+    except Exception as e: 
         app.logger.warn(f"Archivo estático o HTML no encontrado: {filename}, error: {e}")
         return "Archivo no encontrado", 404
 
 
 if __name__ == '__main__':
-    # Configurar logging básico
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s: %(message)s')
     app.logger.info("Iniciando la aplicación MediAlert...")
     if not os.path.exists(INSTANCE_FOLDER_PATH):
-        os.makedirs(INSTANCE_FOLDER_PATH)
+        os.makedirs(INSTANCE_FOLDER_PATH, exist_ok=True)
     if not os.path.exists(app.config['REPORTS_STORAGE_PATH']):
-        os.makedirs(app.config['REPORTS_STORAGE_PATH'])
+        os.makedirs(app.config['REPORTS_STORAGE_PATH'], exist_ok=True)
     app.run(debug=True, host='0.0.0.0', port=5000)
-

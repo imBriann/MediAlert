@@ -344,12 +344,11 @@ def main():
 
         # --- Generar e Insertar Administradores ---
         admins_a_insertar = []
-        admin_nombre_completo = f"{random.choice(all_first_names)} {random.choice(last_names)}"
         admins_a_insertar.append({
-            'nombre': admin_nombre_completo,
-            'cedula': f"ADM{random.randint(10000, 99999)}",
-            'email': f"admin{random.randint(1,100)}@medialert.co",
-            'contrasena': generate_password_hash("adminpass123", method='pbkdf2:sha256'),
+            'nombre': "Brian Acevedo",
+            'cedula': "1092526700",
+            'email': "admin@medialert.co",
+            'contrasena': generate_password_hash("a0416g", method='pbkdf2:sha256'),
             'rol': 'admin',
             'estado_usuario': 'activo',
             'fecha_nacimiento': None,

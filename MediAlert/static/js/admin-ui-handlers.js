@@ -16,7 +16,7 @@ function showView(viewId) {
         case 'view-medicamentos': if(typeof loadMedicamentos === 'function') loadMedicamentos(); break;
         case 'view-alertas': if(typeof loadAlertas === 'function') loadAlertas(); break;
         case 'view-auditoria': if(typeof loadAuditoria === 'function') loadAuditoria(); break;
-        case 'view-reportes': if(typeof loadReportesLog === 'function') loadReportesLog(); break; // NUEVO
+        case 'view-reportes': if(typeof loadReportesLog === 'function') loadReportesLog(); break; 
     }
 }
 
@@ -30,11 +30,16 @@ async function openClienteModal(id = null) {
     const contrasenaHelp = document.getElementById('clienteContrasenaHelp');
     
     const estadoUsuarioSelect = document.getElementById('clienteEstadoUsuario');
-    const estadoUsuarioDiv = document.getElementById('clienteEstadoUsuarioDiv'); // Contenedor del select
+    const estadoUsuarioDiv = document.getElementById('clienteEstadoUsuarioDiv'); 
     
+    // Referencias a los nuevos campos
+    const telefonoInput = document.getElementById('clienteTelefono');
+    const ciudadInput = document.getElementById('clienteCiudad');
+    const fechaNacimientoInput = document.getElementById('clienteFechaNacimiento');
+
     if (id) { // Modo Editar
         modalTitle.textContent = 'Editar Cliente';
-        if(estadoUsuarioDiv) estadoUsuarioDiv.style.display = 'block'; // Mostrar campo de estado
+        if(estadoUsuarioDiv) estadoUsuarioDiv.style.display = 'block'; 
         try {
             const res = await fetch(`/api/admin/clientes/${id}`);
             if (!res.ok) {
@@ -48,6 +53,13 @@ async function openClienteModal(id = null) {
             document.getElementById('clienteEmail').value = cliente.email;
             estadoUsuarioSelect.value = cliente.estado_usuario;
 
+            // Poblar nuevos campos
+            telefonoInput.value = cliente.telefono || '';
+            ciudadInput.value = cliente.ciudad || '';
+            // Asegurarse de que la fecha_nacimiento esté en formato YYYY-MM-DD para el input date
+            fechaNacimientoInput.value = cliente.fecha_nacimiento ? cliente.fecha_nacimiento.split('T')[0] : '';
+
+
             contrasenaLabel.innerHTML = 'Nueva Contraseña (Opcional)';
             contrasenaInput.required = false;
             contrasenaInput.placeholder = 'Dejar en blanco para no cambiar';
@@ -60,8 +72,13 @@ async function openClienteModal(id = null) {
         }
     } else { // Modo Agregar
         modalTitle.textContent = 'Agregar Cliente';
-        if(estadoUsuarioDiv) estadoUsuarioDiv.style.display = 'none'; // Ocultar campo de estado
-        estadoUsuarioSelect.value = 'activo'; // Establecer valor por defecto aunque esté oculto
+        if(estadoUsuarioDiv) estadoUsuarioDiv.style.display = 'none'; 
+        estadoUsuarioSelect.value = 'activo'; 
+
+        // Los nuevos campos se limpian con form.reset()
+        telefonoInput.value = '';
+        ciudadInput.value = '';
+        fechaNacimientoInput.value = '';
 
         contrasenaLabel.innerHTML = 'Contraseña <span class="text-danger">*</span>';
         contrasenaInput.required = true;
@@ -78,11 +95,11 @@ async function openMedicamentoModal(id = null) {
     const modalTitle = document.getElementById('medicamentoModalTitle');
 
     const estadoSelect = document.getElementById('medicamentoEstado');
-    const estadoMedicamentoDiv = document.getElementById('medicamentoEstadoDiv'); // Contenedor del select
+    const estadoMedicamentoDiv = document.getElementById('medicamentoEstadoDiv'); 
 
     if (id) { // Modo Editar
         modalTitle.textContent = 'Editar Medicamento';
-        if(estadoMedicamentoDiv) estadoMedicamentoDiv.style.display = 'block'; // Mostrar campo de estado
+        if(estadoMedicamentoDiv) estadoMedicamentoDiv.style.display = 'block'; 
         try {
             const res = await fetch(`/api/admin/medicamentos/${id}`);
             if (!res.ok) {
@@ -105,8 +122,8 @@ async function openMedicamentoModal(id = null) {
         }
     } else { // Modo Agregar
         modalTitle.textContent = 'Agregar Medicamento';
-        if(estadoMedicamentoDiv) estadoMedicamentoDiv.style.display = 'none'; // Ocultar campo de estado
-        estadoSelect.value = 'disponible'; // Establecer valor por defecto aunque esté oculto
+        if(estadoMedicamentoDiv) estadoMedicamentoDiv.style.display = 'none'; 
+        estadoSelect.value = 'disponible'; 
     }
     if (window.medicamentoModal) window.medicamentoModal.show();
 }
