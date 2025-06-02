@@ -38,6 +38,7 @@ document.addEventListener('DOMContentLoaded', () => {
     window.clienteModal = document.getElementById('clienteModal') ? new bootstrap.Modal(document.getElementById('clienteModal')) : null;
     window.medicamentoModal = document.getElementById('medicamentoModal') ? new bootstrap.Modal(document.getElementById('medicamentoModal')) : null;
     window.alertaModal = document.getElementById('alertaModal') ? new bootstrap.Modal(document.getElementById('alertaModal')) : null;
+    window.clientDetailModalInstance = document.getElementById('clientDetailModal') ? new bootstrap.Modal(document.getElementById('clientDetailModal')) : null;
 
     // --- Delegación de Eventos Principal ---
     document.body.addEventListener('click', async (e) => {
@@ -74,14 +75,17 @@ document.addEventListener('DOMContentLoaded', () => {
         if (targetElement.matches('#btn-add-medicamento') && typeof openMedicamentoModal === 'function') openMedicamentoModal();
         if (targetElement.matches('#btn-add-alerta') && typeof openAlertaModal === 'function') openAlertaModal();
 
-        // Botones de Acción en Tablas (Clientes)
+        // --- Client Card Actions ---
+        // Edit Cliente
         if (targetElement.matches('.btn-edit-cliente') && typeof openClienteModal === 'function') {
             openClienteModal(targetElement.dataset.id);
         }
-        if (targetElement.matches('.btn-delete-cliente')) { // Ahora es Desactivar/Reactivar
+
+        // Toggle Cliente Status
+        if (targetElement.matches('.btn-toggle-status-cliente')) {
             const id = targetElement.dataset.id;
             const nombre = targetElement.dataset.nombre || 'este cliente';
-            const currentStatus = targetElement.querySelector('i.bi').classList.contains('bi-person-slash') ? 'activo' : 'inactivo';
+            const currentStatus = targetElement.dataset.status; // Get status from data-status attribute
             const newStatus = currentStatus === 'activo' ? 'inactivo' : 'activo';
             const actionText = newStatus === 'inactivo' ? 'desactivar' : 'reactivar';
 
@@ -95,11 +99,27 @@ document.addEventListener('DOMContentLoaded', () => {
                     const responseData = await response.json();
                     if (!response.ok) throw new Error(responseData.error || `Error al ${actionText} cliente.`);
                     alert(responseData.message || `Cliente ${actionText} con éxito.`);
-                    if(typeof loadClientes === 'function') loadClientes();
+                    if (typeof loadClientes === 'function') loadClientes(); // Reload cards
                 } catch (error) {
                     console.error(`Error al ${actionText} cliente:`, error);
                     alert(`Error al ${actionText} cliente: ${error.message}`);
                 }
+            }
+        }
+
+        // View Client Details
+        if (targetElement.matches('.btn-view-cliente') && typeof openClientDetailModal === 'function') {
+            openClientDetailModal(targetElement.dataset.id);
+        }
+
+        // Click on Card Body to View Details
+        const clickableCardArea = targetElement.closest('.client-card-clickable-area');
+        if (clickableCardArea) {
+            // Check if the click was on a button inside this area, if so, let that button's handler work
+            if (targetElement.closest('button')) {
+                // Do nothing, let the button's specific handler take over
+            } else if (clickableCardArea.dataset.id && typeof openClientDetailModal === 'function') {
+                openClientDetailModal(clickableCardArea.dataset.id);
             }
         }
 

@@ -652,7 +652,10 @@ def manage_alertas_admin():
         admin_id_actual = session.get('user_id')
 
         if request.method == 'GET':
-            cur.execute("""
+            usuario_id_filtro = request.args.get('usuario_id', type=int)  # New filter for specific user
+
+            # Build the base query
+            query_parts = ["""
                 SELECT 
                     a.id, a.usuario_id, u.nombre as cliente_nombre, u.estado_usuario,
                     a.medicamento_id, m.nombre as medicamento_nombre, m.estado_medicamento,
@@ -660,11 +663,25 @@ def manage_alertas_admin():
                 FROM alertas a
                 JOIN usuarios u ON a.usuario_id = u.id
                 JOIN medicamentos m ON a.medicamento_id = m.id
-                ORDER BY u.nombre, m.nombre, a.fecha_inicio
-            """)
+            """]
+            conditions = []
+            params = []
+
+            if usuario_id_filtro:
+                conditions.append("a.usuario_id = %s")
+                params.append(usuario_id_filtro)
+
+            if conditions:
+                query_parts.append("WHERE " + " AND ".join(conditions))
+            
+            query_parts.append("ORDER BY u.nombre, m.nombre, a.fecha_inicio")
+            
+            final_query = " ".join(query_parts)
+            cur.execute(final_query, tuple(params))
             alertas = cur.fetchall()
+            
             for alerta in alertas:
-                if isinstance(alerta.get('hora_preferida'), (time,)):
+                if isinstance(alerta.get('hora_preferida'), (time,)):  # Ensure proper formatting
                     alerta['hora_preferida'] = alerta['hora_preferida'].strftime('%H:%M:%S')
             return jsonify(alertas)
 

@@ -40,3 +40,25 @@
 #view-clientes {
     display: block;
 }
+
+/* ... existing styles ... */
+#clientes-card-container .card {
+    transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+}
+#clientes-card-container .card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 6px 20px rgba(0,0,0,0.12);
+}
+.client-card .card-body { /* Make card body itself indicate clickability */
+    cursor: pointer;
+}
+.client-card .card-footer {
+    background-color: transparent; /* Cleaner look for the footer */
+    border-top: 1px solid var(--bs-border-color-translucent);
+    padding-top: 0.75rem;
+    padding-bottom: 0.75rem;
+}
+/* Ensure buttons in footer are spaced nicely if they wrap */
+.client-card .card-footer .btn {
+    margin-bottom: 0.25rem; /* Add a little space if buttons wrap to new line */
+}

@@ -88,6 +88,96 @@ async function openClienteModal(id = null) {
     if (window.clienteModal) window.clienteModal.show();
 }
 
+// Add this new function
+async function openClientDetailModal(clientId) {
+    const clientDetailContent = document.getElementById('clientDetailContent');
+    const clientAlertsTableBody = document.getElementById('clientDetailAlertasTableBody');
+    const modalLabel = document.getElementById('clientDetailModalLabel');
+
+    if (!clientDetailContent || !clientAlertsTableBody || !modalLabel) {
+        console.error('Elementos del modal de detalle de cliente no encontrados.');
+        return;
+    }
+
+    // Initialize modal instance if not already done
+    if (!window.clientDetailModalInstance) {
+        const modalElement = document.getElementById('clientDetailModal');
+        if (modalElement) {
+            window.clientDetailModalInstance = new bootstrap.Modal(modalElement);
+        } else {
+            console.error("Modal element #clientDetailModal not found for instantiation.");
+            return;
+        }
+    }
+
+    clientDetailContent.innerHTML = '<div class="text-center p-3"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Cargando...</span></div><p>Cargando detalles del cliente...</p></div>';
+    clientAlertsTableBody.innerHTML = '<tr><td colspan="7" class="text-center"><div class="spinner-border spinner-border-sm" role="status"></div> Cargando alertas...</td></tr>';
+    modalLabel.textContent = 'Detalles del Cliente';
+
+    try {
+        // Fetch client details
+        const clientRes = await fetch(`/api/admin/clientes/${clientId}`);
+        if (!clientRes.ok) {
+            const errData = await clientRes.json();
+            throw new Error(errData.error || 'Error al cargar datos del cliente.');
+        }
+        const client = await clientRes.json();
+        modalLabel.textContent = `Detalles de: ${client.nombre}`;
+
+        clientDetailContent.innerHTML = `
+            <dl class="row">
+                <dt class="col-sm-3">Nombre:</dt><dd class="col-sm-9">${client.nombre || 'N/A'}</dd>
+                <dt class="col-sm-3">Cédula:</dt><dd class="col-sm-9">${client.cedula || 'N/A'}</dd>
+                <dt class="col-sm-3">Email:</dt><dd class="col-sm-9">${client.email || 'N/A'}</dd>
+                <dt class="col-sm-3">Teléfono:</dt><dd class="col-sm-9">${client.telefono || 'N/A'}</dd>
+                <dt class="col-sm-3">Ciudad:</dt><dd class="col-sm-9">${client.ciudad || 'N/A'}</dd>
+                <dt class="col-sm-3">Fec. Nacimiento:</dt><dd class="col-sm-9">${formatDate(client.fecha_nacimiento)}</dd>
+                <dt class="col-sm-3">Fec. Registro:</dt><dd class="col-sm-9">${formatDate(client.fecha_registro)}</dd>
+                <dt class="col-sm-3">Estado:</dt><dd class="col-sm-9"><span class="badge ${client.estado_usuario === 'activo' ? 'bg-success' : 'bg-danger'}">${client.estado_usuario || 'N/A'}</span></dd>
+                <dt class="col-sm-3">Rol:</dt><dd class="col-sm-9">${client.rol || 'N/A'}</dd>
+            </dl>
+        `;
+
+        // Fetch alerts for this specific client using the modified backend or new endpoint
+        const alertasRes = await fetch(`/api/admin/alertas?usuario_id=${clientId}`);
+        if (!alertasRes.ok) {
+             const errAlertData = await alertasRes.json();
+            throw new Error(errAlertData.error || 'Error al cargar alertas del cliente.');
+        }
+        const clientAlertas = await alertasRes.json();
+
+        clientAlertsTableBody.innerHTML = '';
+        if (clientAlertas.length === 0) {
+            clientAlertsTableBody.innerHTML = '<tr><td colspan="7" class="text-center fst-italic">Este cliente no tiene alertas asignadas.</td></tr>';
+        } else {
+            clientAlertas.forEach(a => {
+                const estadoAlertBadgeClass = a.estado_alerta === 'activa' ? 'bg-success' :
+                                       a.estado_alerta === 'completada' ? 'bg-info text-dark' : /* Ensure text is visible on info */
+                                       a.estado_alerta === 'inactiva' ? 'bg-warning text-dark' : /* Ensure text is visible on warning */
+                                       a.estado_alerta === 'fallida' ? 'bg-danger' : 'bg-secondary';
+                clientAlertsTableBody.innerHTML += `
+                    <tr>
+                        <td>${a.medicamento_nombre || 'N/A'}</td>
+                        <td>${a.dosis || 'N/A'}</td>
+                        <td>${a.frecuencia || 'N/A'}</td>
+                        <td>${formatDate(a.fecha_inicio)}</td>
+                        <td>${formatDate(a.fecha_fin)}</td>
+                        <td>${formatTime(a.hora_preferida)}</td>
+                        <td><span class="badge ${estadoAlertBadgeClass}">${a.estado_alerta || 'N/A'}</span></td>
+                    </tr>`;
+            });
+        }
+        if (window.clientDetailModalInstance) window.clientDetailModalInstance.show();
+
+    } catch (error) {
+        console.error('Error en openClientDetailModal:', error);
+        modalLabel.textContent = 'Error al Cargar Detalles';
+        clientDetailContent.innerHTML = `<div class="alert alert-danger">No se pudieron cargar los detalles del cliente: ${error.message}</div>`;
+        clientAlertsTableBody.innerHTML = `<tr><td colspan="7" class="text-center text-danger">Error al cargar alertas.</td></tr>`;
+        if (window.clientDetailModalInstance) window.clientDetailModalInstance.show();
+    }
+}
+
 async function openMedicamentoModal(id = null) {
     const form = document.getElementById('medicamentoForm');
     form.reset();

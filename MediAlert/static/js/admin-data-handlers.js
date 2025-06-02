@@ -94,40 +94,59 @@ function formatTime(timeString) {
 
 
 async function loadClientes() {
-    const tableBody = document.getElementById('clientes-table-body');
-    if (!tableBody) {
-        console.error("Elemento 'clientes-table-body' no encontrado.");
+    const cardContainer = document.getElementById('clientes-card-container');
+    if (!cardContainer) {
+        console.error("Elemento 'clientes-card-container' no encontrado.");
         return;
     }
     try {
-        const clientes = await fetchData('/api/admin/clientes?estado=todos&rol=cliente', 'Error al cargar clientes');
-        tableBody.innerHTML = '';
+        // Fetch only clients
+        const clientes = await fetchData('/api/admin/clientes?rol=cliente&estado=todos', 'Error al cargar clientes');
+        cardContainer.innerHTML = ''; // Clear previous cards
+
         if (!clientes || clientes.length === 0) {
-            tableBody.innerHTML = '<tr><td colspan="9" class="text-center">No hay clientes registrados.</td></tr>';
+            cardContainer.innerHTML = '<div class="col-12"><p class="text-center">No hay clientes registrados.</p></div>';
         } else {
             clientes.forEach(c => {
                 const estadoBadgeClass = c.estado_usuario === 'activo' ? 'bg-success' : 'bg-danger';
-                tableBody.innerHTML += `
-                    <tr>
-                        <td>${c.nombre || 'N/A'}</td>
-                        <td>${c.cedula || 'N/A'}</td>
-                        <td>${c.email || 'N/A'}</td>
-                        <td>${c.telefono || 'N/A'}</td>
-                        <td>${c.ciudad || 'N/A'}</td>
-                        <td>${formatDate(c.fecha_nacimiento)}</td>
-                        <td>${formatDate(c.fecha_registro)}</td>
-                        <td><span class="badge ${estadoBadgeClass}">${c.estado_usuario || 'N/A'}</span></td>
-                        <td>
-                            <button class="btn btn-sm btn-info btn-edit-cliente" data-id="${c.id}" title="Editar Cliente"><i class="bi bi-pencil-square"></i></button>
-                            <button class="btn btn-sm btn-warning btn-delete-cliente" data-id="${c.id}" data-nombre="${c.nombre}" title="${c.estado_usuario === 'activo' ? 'Desactivar' : 'Reactivar'} Cliente">
-                                <i class="bi ${c.estado_usuario === 'activo' ? 'bi-person-slash' : 'bi-person-check'}"></i>
-                            </button>
-                        </td>
-                    </tr>`;
+                const toggleButtonIcon = c.estado_usuario === 'activo' ? 'bi-person-slash' : 'bi-person-check';
+                const toggleButtonText = c.estado_usuario === 'activo' ? 'Desactivar' : 'Reactivar';
+                const toggleButtonTitle = c.estado_usuario === 'activo' ? 'Desactivar Cliente' : 'Reactivar Cliente';
+
+                cardContainer.innerHTML += `
+                    <div class="col">
+                        <div class="card h-100 shadow-sm">
+                            <div class="card-body client-card-clickable-area" data-id="${c.id}">
+                                <h5 class="card-title mb-2">${c.nombre || 'N/A'}</h5>
+                                <p class="card-text mb-1">
+                                    <small class="text-muted">CC: ${c.cedula || 'N/A'}</small>
+                                </p>
+                                <p class="card-text mb-2">
+                                    <span class="badge ${estadoBadgeClass}">${c.estado_usuario || 'N/A'}</span>
+                                </p>
+                            </div>
+                            <div class="card-footer">
+                                <div class="d-flex justify-content-start flex-wrap">
+                                    <button class="btn btn-sm btn-info btn-edit-cliente me-2 mb-1" data-id="${c.id}" title="Editar Cliente">
+                                        <i class="bi bi-pencil-square"></i> Editar
+                                    </button>
+                                    <button class="btn btn-sm btn-warning btn-toggle-status-cliente me-2 mb-1" data-id="${c.id}" data-nombre="${c.nombre}" data-status="${c.estado_usuario}" title="${toggleButtonTitle}">
+                                        <i class="bi ${toggleButtonIcon}"></i> ${toggleButtonText}
+                                    </button>
+                                    <button class="btn btn-sm btn-primary btn-view-cliente mb-1" data-id="${c.id}" title="Ver Detalles Completos">
+                                        <i class="bi bi-eye-fill"></i> Ver
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>`;
             });
         }
     } catch (error) {
-        renderErrorRow(tableBody, 9, error);
+        if (cardContainer) {
+            cardContainer.innerHTML = `<div class="col-12"><p class="text-center text-danger">Error al cargar los datos de clientes: ${error.message}</p></div>`;
+        }
+        console.error("Error en loadClientes:", error);
     }
 }
 
