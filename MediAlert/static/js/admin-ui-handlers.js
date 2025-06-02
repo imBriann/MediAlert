@@ -12,8 +12,6 @@ function showView(viewId) {
         if (link.dataset.view === viewId) link.classList.add('active');
     });
 
-    // Cargar datos según la vista
-    // Estas funciones deben estar definidas globalmente (desde admin-data-handlers.js)
     switch (viewId) {
         case 'view-clientes': if(typeof loadClientes === 'function') loadClientes(); break;
         case 'view-medicamentos': if(typeof loadMedicamentos === 'function') loadMedicamentos(); break;
@@ -26,107 +24,152 @@ async function openClienteModal(id = null) {
     const form = document.getElementById('clienteForm');
     form.reset();
     document.getElementById('clienteId').value = '';
+    const modalTitle = document.getElementById('clienteModalTitle');
+    const contrasenaInput = document.getElementById('clienteContrasena');
+    const contrasenaLabel = document.getElementById('clienteContrasenaLabel');
+    const contrasenaHelp = document.getElementById('clienteContrasenaHelp');
+    const estadoUsuarioSelect = document.getElementById('clienteEstadoUsuario');
     
     if (id) { // Modo Editar
+        modalTitle.textContent = 'Editar Cliente';
         try {
             const res = await fetch(`/api/admin/clientes/${id}`);
-            if (!res.ok) throw new Error(`Error al obtener datos del cliente: ${res.statusText}`);
+            if (!res.ok) {
+                const errorData = await res.json();
+                throw new Error(errorData.error || `Error al obtener datos del cliente: ${res.statusText}`);
+            }
             const cliente = await res.json();
-            document.getElementById('clienteModalTitle').textContent = 'Editar Cliente';
             document.getElementById('clienteId').value = cliente.id;
             document.getElementById('clienteNombre').value = cliente.nombre;
             document.getElementById('clienteCedula').value = cliente.cedula;
             document.getElementById('clienteEmail').value = cliente.email;
-            document.getElementById('password-field-container').style.display = 'none';
-            document.getElementById('clienteContrasena').required = false;
+            estadoUsuarioSelect.value = cliente.estado_usuario;
+
+            contrasenaLabel.innerHTML = 'Nueva Contraseña (Opcional)';
+            contrasenaInput.required = false;
+            contrasenaInput.placeholder = 'Dejar en blanco para no cambiar';
+            contrasenaHelp.textContent = 'Solo ingrese un valor si desea cambiar la contraseña actual.';
+
         } catch(error) {
             console.error("Error en openClienteModal (edit):", error);
-            alert("No se pudieron cargar los datos del cliente para editar.");
+            alert(`No se pudieron cargar los datos del cliente: ${error.message}`);
             return;
         }
     } else { // Modo Agregar
-        document.getElementById('clienteModalTitle').textContent = 'Agregar Cliente';
-        document.getElementById('password-field-container').style.display = 'block';
-        document.getElementById('clienteContrasena').required = true;
+        modalTitle.textContent = 'Agregar Cliente';
+        contrasenaLabel.innerHTML = 'Contraseña <span class="text-danger">*</span>';
+        contrasenaInput.required = true;
+        contrasenaInput.placeholder = 'Ingrese la contraseña';
+        contrasenaHelp.textContent = 'Requerida para nuevos clientes.';
+        estadoUsuarioSelect.value = 'activo'; // Default para nuevo cliente
     }
-    // Asume que window.clienteModal está disponible globalmente desde admin-main.js
-    if (window.clienteModal && typeof window.clienteModal.show === 'function') {
-        window.clienteModal.show();
-    } else {
-        console.error("clienteModal no está disponible o no tiene el método show.");
-    }
+    if (window.clienteModal) window.clienteModal.show();
 }
 
-function openMedicamentoModal(id = null, data = {}) {
+async function openMedicamentoModal(id = null) {
     const form = document.getElementById('medicamentoForm');
     form.reset();
     document.getElementById('medicamentoId').value = '';
-    
+    const modalTitle = document.getElementById('medicamentoModalTitle');
+    const estadoSelect = document.getElementById('medicamentoEstado');
+
     if (id) { // Modo Editar
-        document.getElementById('medicamentoModalTitle').textContent = 'Editar Medicamento';
-        document.getElementById('medicamentoId').value = id;
-        document.getElementById('medicamentoNombre').value = data.nombre || ''; // Asegurar que data.nombre exista
-        document.getElementById('medicamentoDescripcion').value = data.descripcion || ''; // Asegurar que data.descripcion exista
+        modalTitle.textContent = 'Editar Medicamento';
+        try {
+            const res = await fetch(`/api/admin/medicamentos/${id}`);
+            if (!res.ok) {
+                 const errorData = await res.json();
+                 throw new Error(errorData.error || `Error al obtener datos del medicamento: ${res.statusText}`);
+            }
+            const med = await res.json();
+            document.getElementById('medicamentoId').value = med.id;
+            document.getElementById('medicamentoNombre').value = med.nombre || '';
+            document.getElementById('medicamentoDescripcion').value = med.descripcion || '';
+            document.getElementById('medicamentoComposicion').value = med.composicion || '';
+            document.getElementById('medicamentoSintomasSecundarios').value = med.sintomas_secundarios || '';
+            document.getElementById('medicamentoIndicaciones').value = med.indicaciones || '';
+            document.getElementById('medicamentoRangoEdad').value = med.rango_edad || '';
+            estadoSelect.value = med.estado_medicamento || 'disponible';
+        } catch(error) {
+            console.error("Error en openMedicamentoModal (edit):", error);
+            alert(`No se pudieron cargar los datos del medicamento: ${error.message}`);
+            return;
+        }
     } else { // Modo Agregar
-        document.getElementById('medicamentoModalTitle').textContent = 'Agregar Medicamento';
+        modalTitle.textContent = 'Agregar Medicamento';
+        estadoSelect.value = 'disponible'; // Default para nuevo medicamento
     }
-    // Asume que window.medicamentoModal está disponible globalmente desde admin-main.js
-    if (window.medicamentoModal && typeof window.medicamentoModal.show === 'function') {
-        window.medicamentoModal.show();
-    } else {
-        console.error("medicamentoModal no está disponible o no tiene el método show.");
+    if (window.medicamentoModal) window.medicamentoModal.show();
+}
+
+async function populateSelect(selectElement, apiUrl, valueField, textFieldParts, defaultOptionText, errorMessage) {
+    selectElement.innerHTML = `<option value="" disabled selected>${defaultOptionText}</option>`;
+    try {
+        const response = await fetch(apiUrl);
+        if (!response.ok) throw new Error(errorMessage);
+        const items = await response.json();
+        items.forEach(item => {
+            const text = textFieldParts.map(part => item[part]).join(' - ');
+            const option = new Option(text, item[valueField]);
+            selectElement.add(option);
+        });
+    } catch (error) {
+        console.error(error);
+        alert(error.message);
     }
 }
 
-async function openAlertaModal(alertaId = null) { // alertaId para futura edición
+async function openAlertaModal(alertaId = null) {
     const form = document.getElementById('alertaForm');
     form.reset();
     document.getElementById('alertaId').value = ''; 
-
     const modalTitle = document.getElementById('alertaModalLabel');
     const usuarioSelect = document.getElementById('alertaUsuario');
     const medicamentoSelect = document.getElementById('alertaMedicamento');
+    const estadoSelect = document.getElementById('alertaEstado');
 
-    modalTitle.textContent = 'Asignar Nueva Alerta';
-    // Limpiar selectores manteniendo la opción por defecto
-    usuarioSelect.innerHTML = '<option value="" disabled selected>Seleccione un cliente...</option>';
-    medicamentoSelect.innerHTML = '<option value="" disabled selected>Seleccione un medicamento...</option>';
+    // Populate dropdowns
+    await populateSelect(usuarioSelect, '/api/admin/clientes?estado=activo', 'id', ['nombre', 'cedula'], 'Seleccione un cliente activo...', 'No se pudieron cargar los clientes.');
+    await populateSelect(medicamentoSelect, '/api/admin/medicamentos?estado=disponible', 'id', ['nombre'], 'Seleccione un medicamento disponible...', 'No se pudieron cargar los medicamentos.');
 
-    try {
-        // Cargar Clientes
-        const clientesResponse = await fetch('/api/admin/clientes');
-        if (!clientesResponse.ok) throw new Error('No se pudieron cargar los clientes.');
-        const clientes = await clientesResponse.json();
-        clientes.forEach(cliente => {
-            const option = new Option(`${cliente.nombre} (C.C: ${cliente.cedula})`, cliente.id);
-            usuarioSelect.add(option);
-        });
+    if (alertaId) {
+        modalTitle.textContent = 'Editar Alerta';
+        try {
+            const res = await fetch(`/api/admin/alertas/${alertaId}`);
+            if (!res.ok) {
+                 const errorData = await res.json();
+                 throw new Error(errorData.error || `Error al obtener datos de la alerta: ${res.statusText}`);
+            }
+            const alerta = await res.json();
+            document.getElementById('alertaId').value = alerta.id;
+            usuarioSelect.value = alerta.usuario_id;
+            medicamentoSelect.value = alerta.medicamento_id;
+            document.getElementById('alertaDosis').value = alerta.dosis || '';
+            document.getElementById('alertaFrecuencia').value = alerta.frecuencia || '';
+            document.getElementById('alertaFechaInicio').value = alerta.fecha_inicio ? alerta.fecha_inicio.split('T')[0] : '';
+            document.getElementById('alertaFechaFin').value = alerta.fecha_fin ? alerta.fecha_fin.split('T')[0] : '';
+            document.getElementById('alertaHoraPreferida').value = alerta.hora_preferida || '';
+            estadoSelect.value = alerta.estado || 'activa';
 
-        // Cargar Medicamentos
-        const medicamentosResponse = await fetch('/api/admin/medicamentos');
-        if (!medicamentosResponse.ok) throw new Error('No se pudieron cargar los medicamentos.');
-        const medicamentos = await medicamentosResponse.json();
-        medicamentos.forEach(medicamento => {
-            const option = new Option(medicamento.nombre, medicamento.id);
-            medicamentoSelect.add(option);
-        });
-
-        if (alertaId) {
-            // Lógica para cargar datos de una alerta existente para editar (FUTURO)
-            // modalTitle.textContent = 'Editar Alerta';
-            // const alertDataResponse = await fetch(`/api/admin/alertas/${alertaId}`);
-            // const alertData = await alertDataResponse.json();
-            // Llenar campos del formulario...
+        } catch (error) {
+            console.error("Error al cargar datos de la alerta para editar:", error);
+            alert(`No se pudieron cargar los datos de la alerta: ${error.message}`);
+            return;
         }
-
-        if (window.alertaModal && typeof window.alertaModal.show === 'function') {
-            window.alertaModal.show();
-        } else {
-            console.error("La instancia del modal 'alertaModal' no está disponible.");
-        }
-
-    } catch (error) {
-        console.error("Error al preparar el modal de alerta:", error);
-        alert(`Error al cargar datos para el formulario de alerta: ${error.message}`);
+    } else {
+        modalTitle.textContent = 'Asignar Nueva Alerta';
+        estadoSelect.value = 'activa'; // Default para nueva alerta
     }
+
+    if (window.alertaModal) window.alertaModal.show();
 }
+
+document.addEventListener('DOMContentLoaded', () => {
+    const auditoriaFilter = document.getElementById('auditoria-filter');
+    if (auditoriaFilter) {
+        auditoriaFilter.addEventListener('change', (e) => {
+            const filter = e.target.value;
+            if (typeof loadAuditoria === 'function') loadAuditoria(filter);
+        });
+    }
+});

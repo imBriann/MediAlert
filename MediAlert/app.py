@@ -8,6 +8,7 @@ from werkzeug.security import generate_password_hash, check_password_hash # Para
 import os
 import logging
 from dotenv import load_dotenv
+from datetime import time  # Importar el módulo time
 
 # Load environment variables from .env file
 load_dotenv()
@@ -69,19 +70,29 @@ def registrar_auditoria_aplicacion(accion, tabla_afectada=None, registro_id=None
     sp_registrar_evento_auditoria.
     Los datos (anteriores, nuevos, adicionales) deben ser diccionarios de Python.
     """
-    app_user_id = session.get('user_id') # Puede ser None si la acción no está ligada a una sesión de usuario
+    def serialize_dates(obj):
+        """Recursively convert date objects to strings in a dictionary."""
+        if isinstance(obj, dict):
+            return {k: serialize_dates(v) for k, v in obj.items()}
+        elif isinstance(obj, list):
+            return [serialize_dates(i) for i in obj]
+        elif isinstance(obj, (date, time)):
+            return obj.isoformat()
+        return obj
+
+    app_user_id = session.get('user_id')  # Puede ser None si la acción no está ligada a una sesión de usuario
 
     conn = None
     cur = None
     try:
         conn = get_db_connection()
         cur = conn.cursor()
-        
+
         # Convertir diccionarios de Python a objetos Json para psycopg2
         # Esto asegura que se manejen correctamente como JSONB en PostgreSQL
-        p_datos_anteriores = Json(datos_anteriores) if datos_anteriores is not None else None
-        p_datos_nuevos = Json(datos_nuevos) if datos_nuevos is not None else None
-        p_detalles_adicionales = Json(detalles_adicionales) if detalles_adicionales is not None else None
+        p_datos_anteriores = Json(serialize_dates(datos_anteriores)) if datos_anteriores is not None else None
+        p_datos_nuevos = Json(serialize_dates(datos_nuevos)) if datos_nuevos is not None else None
+        p_detalles_adicionales = Json(serialize_dates(detalles_adicionales)) if detalles_adicionales is not None else None
 
         cur.execute(
             "SELECT sp_registrar_evento_auditoria(%s, %s, %s, %s, %s, %s, %s);",
@@ -508,6 +519,12 @@ def manage_alertas_admin():
                 ORDER BY u.nombre, m.nombre, a.fecha_inicio
             """)
             alertas = cur.fetchall()
+
+            # Convertir objetos de tipo `time` a cadenas
+            for alerta in alertas:
+                if isinstance(alerta.get('hora_preferida'), (time,)):
+                    alerta['hora_preferida'] = alerta['hora_preferida'].strftime('%H:%M:%S')
+
             return jsonify(alertas)
 
         if request.method == 'POST':
@@ -583,6 +600,11 @@ def manage_single_alerta_admin(alerta_id):
             alerta = cur.fetchone()
             if not alerta:
                 return jsonify({'error': 'Alerta no encontrada.'}), 404
+
+            # Convertir objetos de tipo `time` a cadenas
+            if isinstance(alerta.get('hora_preferida'), (time,)):
+                alerta['hora_preferida'] = alerta['hora_preferida'].strftime('%H:%M:%S')
+
             return jsonify(alerta)
 
         if request.method == 'PUT':
@@ -710,10 +732,11 @@ def get_auditoria_logs():
     try:
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
-        # La columna usuario_id_app en la tabla auditoria se llena desde sp_registrar_evento_auditoria
-        # y también por los triggers si medialert.app_user_id está seteado.
-        # Aquí unimos con usuarios para obtener el nombre del admin que está en la sesión de la app, si es posible.
-        cur.execute("""
+
+        # Obtener el filtro de tabla afectada desde los parámetros de consulta
+        tabla_filtro = request.args.get('tabla', None)
+
+        query = """
             SELECT 
                 aud.id, 
                 aud.fecha_hora,
@@ -726,9 +749,18 @@ def get_auditoria_logs():
                 aud.datos_nuevos, 
                 aud.detalles_adicionales
             FROM auditoria aud
-            LEFT JOIN usuarios u_app ON aud.usuario_id_app = u_app.id 
-            ORDER BY aud.fecha_hora DESC
-        """)
+            LEFT JOIN usuarios u_app ON aud.usuario_id_app = u_app.id
+        """
+        params = []
+
+        # Aplicar filtro si se especifica una tabla afectada
+        if tabla_filtro:
+            query += " WHERE aud.tabla_afectada = %s"
+            params.append(tabla_filtro)
+
+        query += " ORDER BY aud.fecha_hora DESC"
+
+        cur.execute(query, tuple(params))
         logs = cur.fetchall()
         return jsonify(logs)
     except psycopg2.Error as e:
@@ -772,7 +804,7 @@ def serve_html_or_static(filename):
 
 if __name__ == '__main__':
     # Configurar logging básico
-    logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s: %(message)s [in %(pathname)s:%(lineno)d]')
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s: %(message)s')
     app.logger.info("Iniciando la aplicación MediAlert...")
     app.run(debug=True, host='0.0.0.0', port=5000)
 

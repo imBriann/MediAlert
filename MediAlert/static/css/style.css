@@ -1,6 +1,31 @@
 .sidebar {
     width: 280px;
     height: 100vh;
+    position: fixed;
+    top: 0;
+    left: 0;
+    overflow-y: auto;
+}
+
+.ms-280 {
+    margin-left: 280px;
+}
+
+.table-hover tbody tr:hover {
+    background-color: rgba(0, 0, 0, 0.05);
+}
+
+.table-bordered th, .table-bordered td {
+    border: 1px solid #dee2e6;
+}
+
+.table-group-divider {
+    border-top: 2px solid #dee2e6;
+}
+
+.table-dark th {
+    background-color: #343a40;
+    color: #fff;
 }
 
 .min-vh-100 {
