@@ -1,6 +1,6 @@
 import psycopg2
 import os
-
+#nextbal
 # --- Configuración de la Conexión a la Base de Datos ---
 PG_HOST = 'localhost'
 PG_DB = 'medialert'
@@ -24,7 +24,7 @@ SQL_COMMANDS = """
 
     -- Tabla de Medicamentos con la restricción UNIQUE en el nombre
     CREATE TABLE medicamentos (
-        id SERIAL PRIMARY KEY,
+        id SERIAL PRIMARY KEY, 
         nombre VARCHAR(100) UNIQUE NOT NULL, -- <-- ¡AQUÍ ESTÁ LA CORRECCIÓN! AÑADIMOS UNIQUE.
         descripcion TEXT,
         composicion TEXT,
