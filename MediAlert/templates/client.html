@@ -15,7 +15,8 @@
             <div class="d-flex align-items-center">
                 <span class="navbar-text me-3">Bienvenido, <strong id="client-name">Cargando...</strong></span>
                 <button class="btn btn-outline-secondary me-2" id="theme-toggler" type="button" title="Cambiar tema">
-                    <i class="bi bi-sun-fill"></i> </button>
+                    <i class="bi bi-sun-fill"></i></button>
+                    <a href="{{ url_for('serve_html_or_static', filename='configuracion.html') }}" class="btn btn-outline-info me-2" title="Configuración"><i class="bi bi-gear-fill"></i></a>
                 <button class="btn btn-danger" id="logout-btn-client">Cerrar Sesión</button>
             </div>
         </div>

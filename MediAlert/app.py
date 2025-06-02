@@ -378,6 +378,87 @@ def manage_single_cliente(uid):
     finally:
         if conn:
             conn.close()
+            
+# --- API: CONFIGURACIÓN DE USUARIO ---
+@app.route('/api/configuracion/usuario', methods=['GET'])
+@login_required
+def get_configuracion_usuario():
+    user_id = session.get('user_id')
+    conn = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT nombre, email, rol FROM usuarios WHERE id = %s", (user_id,))
+        user_data = cur.fetchone()
+        if not user_data:
+            return jsonify({'error': 'Usuario no encontrado.'}), 404
+        return jsonify(user_data)
+    except psycopg2.Error as e:
+        app.logger.error(f"Error de BD al obtener datos de configuración del usuario {user_id}: {e}")
+        return jsonify({'error': 'Error al cargar datos de configuración.'}), 500
+    finally:
+        if conn:
+            conn.close()
+
+@app.route('/api/configuracion/cambiar_contrasena', methods=['POST'])
+@login_required
+def cambiar_contrasena_usuario():
+    user_id = session.get('user_id')
+    data = request.json
+    contrasena_actual = data.get('contrasena_actual')
+    contrasena_nueva = data.get('contrasena_nueva')
+    contrasena_nueva_confirmacion = data.get('contrasena_nueva_confirmacion')
+
+    if not all([contrasena_actual, contrasena_nueva, contrasena_nueva_confirmacion]):
+        return jsonify({'error': 'Todos los campos de contraseña son requeridos.'}), 400
+    
+    if contrasena_nueva != contrasena_nueva_confirmacion:
+        return jsonify({'error': 'La nueva contraseña y su confirmación no coinciden.'}), 400
+    
+    if len(contrasena_nueva) < 6: # Ejemplo de validación simple de longitud
+        return jsonify({'error': 'La nueva contraseña debe tener al menos 6 caracteres.'}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        
+        # Verificar contraseña actual
+        cur.execute("SELECT contrasena as hashed_password FROM usuarios WHERE id = %s", (user_id,))
+        user = cur.fetchone()
+        if not user or not check_password_hash(user['hashed_password'], contrasena_actual):
+            registrar_auditoria_aplicacion(
+                'CAMBIO_CONTRASENA_FALLIDO',
+                tabla_afectada='usuarios',
+                registro_id=str(user_id),
+                detalles_adicionales={'motivo': 'Contraseña actual incorrecta'}
+            )
+            return jsonify({'error': 'La contraseña actual es incorrecta.'}), 401
+            
+        nueva_contrasena_hashed = generate_password_hash(contrasena_nueva)
+        cur.execute("UPDATE usuarios SET contrasena = %s WHERE id = %s", (nueva_contrasena_hashed, user_id))
+        conn.commit()
+        
+        registrar_auditoria_aplicacion(
+            'CAMBIO_CONTRASENA_EXITOSO',
+            tabla_afectada='usuarios',
+            registro_id=str(user_id),
+            datos_anteriores={'contrasena': '********'}, # No loguear hash antiguo
+            datos_nuevos={'contrasena': '********'}   # No loguear hash nuevo
+        )
+        return jsonify({'message': 'Contraseña actualizada con éxito.'})
+        
+    except psycopg2.Error as e:
+        app.logger.error(f"Error de BD al cambiar contraseña para usuario {user_id}: {e}")
+        if conn: conn.rollback()
+        return jsonify({'error': 'Error de base de datos al cambiar la contraseña.'}), 500
+    except Exception as e:
+        app.logger.error(f"Error general al cambiar contraseña para usuario {user_id}: {e}")
+        if conn: conn.rollback()
+        return jsonify({'error': 'Error interno del servidor al cambiar la contraseña.'}), 500
+    finally:
+        if conn:
+            conn.close()
 
 # --- API: GESTIÓN DE MEDICAMENTOS ---
 @app.route('/api/admin/medicamentos', methods=['GET', 'POST'])

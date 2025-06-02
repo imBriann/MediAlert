@@ -28,10 +28,13 @@ async function openClienteModal(id = null) {
     const contrasenaInput = document.getElementById('clienteContrasena');
     const contrasenaLabel = document.getElementById('clienteContrasenaLabel');
     const contrasenaHelp = document.getElementById('clienteContrasenaHelp');
+    
     const estadoUsuarioSelect = document.getElementById('clienteEstadoUsuario');
+    const estadoUsuarioDiv = document.getElementById('clienteEstadoUsuarioDiv'); // Contenedor del select
     
     if (id) { // Modo Editar
         modalTitle.textContent = 'Editar Cliente';
+        if(estadoUsuarioDiv) estadoUsuarioDiv.style.display = 'block'; // Mostrar campo de estado
         try {
             const res = await fetch(`/api/admin/clientes/${id}`);
             if (!res.ok) {
@@ -57,11 +60,13 @@ async function openClienteModal(id = null) {
         }
     } else { // Modo Agregar
         modalTitle.textContent = 'Agregar Cliente';
+        if(estadoUsuarioDiv) estadoUsuarioDiv.style.display = 'none'; // Ocultar campo de estado
+        estadoUsuarioSelect.value = 'activo'; // Establecer valor por defecto aunque esté oculto
+
         contrasenaLabel.innerHTML = 'Contraseña <span class="text-danger">*</span>';
         contrasenaInput.required = true;
         contrasenaInput.placeholder = 'Ingrese la contraseña';
         contrasenaHelp.textContent = 'Requerida para nuevos clientes.';
-        estadoUsuarioSelect.value = 'activo'; // Default para nuevo cliente
     }
     if (window.clienteModal) window.clienteModal.show();
 }
@@ -71,10 +76,13 @@ async function openMedicamentoModal(id = null) {
     form.reset();
     document.getElementById('medicamentoId').value = '';
     const modalTitle = document.getElementById('medicamentoModalTitle');
+
     const estadoSelect = document.getElementById('medicamentoEstado');
+    const estadoMedicamentoDiv = document.getElementById('medicamentoEstadoDiv'); // Contenedor del select
 
     if (id) { // Modo Editar
         modalTitle.textContent = 'Editar Medicamento';
+        if(estadoMedicamentoDiv) estadoMedicamentoDiv.style.display = 'block'; // Mostrar campo de estado
         try {
             const res = await fetch(`/api/admin/medicamentos/${id}`);
             if (!res.ok) {
@@ -97,7 +105,8 @@ async function openMedicamentoModal(id = null) {
         }
     } else { // Modo Agregar
         modalTitle.textContent = 'Agregar Medicamento';
-        estadoSelect.value = 'disponible'; // Default para nuevo medicamento
+        if(estadoMedicamentoDiv) estadoMedicamentoDiv.style.display = 'none'; // Ocultar campo de estado
+        estadoSelect.value = 'disponible'; // Establecer valor por defecto aunque esté oculto
     }
     if (window.medicamentoModal) window.medicamentoModal.show();
 }

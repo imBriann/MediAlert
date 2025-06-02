@@ -38,13 +38,21 @@ CREATE TABLE usuarios (
     email VARCHAR(100) UNIQUE NOT NULL,
     contrasena VARCHAR(255) NOT NULL,
     rol VARCHAR(10) NOT NULL CHECK (rol IN ('admin', 'cliente')),
-    estado_usuario VARCHAR(10) DEFAULT 'activo' NOT NULL CHECK (estado_usuario IN ('activo', 'inactivo'))
+    estado_usuario VARCHAR(10) DEFAULT 'activo' NOT NULL CHECK (estado_usuario IN ('activo', 'inactivo')),
+    fecha_nacimiento DATE,          -- NUEVO CAMPO
+    telefono VARCHAR(20),           -- NUEVO CAMPO
+    ciudad VARCHAR(100),            -- NUEVO CAMPO (o localidad si prefieres ese nombre)
+    fecha_registro DATE DEFAULT CURRENT_DATE -- NUEVO CAMPO (con valor por defecto)
 );
 COMMENT ON TABLE usuarios IS 'Almacena la información de los usuarios del sistema, incluyendo administradores y clientes.';
 COMMENT ON COLUMN usuarios.id IS 'Identificador único del usuario (autonumérico).';
 COMMENT ON COLUMN usuarios.rol IS 'Define el rol del usuario dentro del sistema (admin o cliente).';
 COMMENT ON COLUMN usuarios.cedula IS 'Número de cédula del usuario, debe ser único.';
 COMMENT ON COLUMN usuarios.estado_usuario IS 'Estado del usuario. Para clientes, "inactivo" significa borrado lógico y cesarán sus notificaciones de alerta.';
+COMMENT ON COLUMN usuarios.fecha_nacimiento IS 'Fecha de nacimiento del usuario.';
+COMMENT ON COLUMN usuarios.telefono IS 'Número de teléfono del usuario.';
+COMMENT ON COLUMN usuarios.ciudad IS 'Ciudad de residencia del usuario.';
+COMMENT ON COLUMN usuarios.fecha_registro IS 'Fecha en que el usuario fue registrado en el sistema.';
 
 
 -- Tabla: medicamentos

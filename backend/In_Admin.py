@@ -1,10 +1,9 @@
-# backend/populate_database.py
 import psycopg2
 import os
 from dotenv import load_dotenv
 from werkzeug.security import generate_password_hash
 import random
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date # Asegúrate de importar date
 
 # Cargar variables de entorno desde el archivo .env
 load_dotenv()
@@ -13,18 +12,49 @@ load_dotenv()
 PG_HOST = os.getenv('PG_HOST', 'localhost')
 PG_DB = os.getenv('PG_DB', 'medialert')
 PG_USER = os.getenv('PG_USER', 'postgres')
-PG_PASS = os.getenv('PG_PASS', '0102')  # ¡Usa tu contraseña real o una variable de entorno!
+PG_PASS = os.getenv('PG_PASS', '0102')
 PG_PORT = os.getenv('PG_PORT', '5432')
 
 # --- Datos para Generación ---
-first_names = ["Carlos", "Ana", "Juan", "Maria", "Luis", "Laura", "Pedro", "Sofia", "Diego", "Valentina",
-               "Andres", "Camila", "Santiago", "Isabella", "Gabriel", "Mariana", "Jose", "Daniela",
-               "Miguel", "Valeria", "Ricardo", "Lucia", "Fernando", "Paula", "Javier", "Gabriela"]
-last_names = ["González", "Rodríguez", "Pérez", "Martínez", "García", "López", "Hernández", "Sánchez",
-              "Ramírez", "Torres", "Flores", "Rivera", "Gómez", "Díaz", "Vargas", "Castro",
-              "Méndez", "Ortiz", "Silva", "Romero", "Navarro", "Rojas", "Morales", "Acosta"]
+# Listas mejoradas con nombres y apellidos colombianos comunes
+first_names_male = [
+    'Juan', 'Carlos', 'Andrés', 'Jorge', 'Luis', 'Diego', 'Fernando', 'Alejandro', 
+    'Miguel', 'José', 'David', 'Santiago', 'Sebastián', 'Daniel', 'Mateo',
+    'Camilo', 'Felipe', 'Ricardo', 'Esteban', 'Manuel'
+]
+first_names_female = [
+    'María', 'Ana', 'Sofía', 'Camila', 'Valentina', 'Isabella', 'Laura', 'Paula', 
+    'Daniela', 'Carolina', 'Luisa', 'Juliana', 'Gabriela', 'Manuela', 'Adriana',
+    'Marcela', 'Patricia', 'Sandra', 'Mónica', 'Catalina'
+]
+all_first_names = first_names_male + first_names_female
 
-common_pass = "password123" # Common password for generated users for simplicity in a dev environment
+last_names = [
+    'Gómez', 'Rodríguez', 'González', 'López', 'Martínez', 'Hernández', 'Pérez', 
+    'Díaz', 'Torres', 'Ramírez', 'Vargas', 'Moreno', 'Jiménez', 'Ruiz', 'Suárez',
+    'García', 'Ortiz', 'Silva', 'Rojas', 'Mendoza', 'Castro', 'Álvarez', 'Fernández',
+    'Sanchez', 'Romero', 'Soto', 'Herrera', 'Mejía', 'Osorio', 'Valencia'
+]
+
+# Ciudades colombianas con sus códigos de área para teléfonos fijos (indicativos)
+# y algunos prefijos comunes para celulares
+ciudades_colombia = {
+    'Bogotá D.C.': {'indicativo_fijo': '601', 'prefijos_celular': ['300', '301', '302', '304', '305', '310', '311', '312', '313', '314', '320', '321', '322', '323', '350']},
+    'Medellín': {'indicativo_fijo': '604', 'prefijos_celular': ['300', '301', '302', '304', '305', '310', '311', '312', '313', '314', '320', '321', '322', '323', '350']},
+    'Cali': {'indicativo_fijo': '602', 'prefijos_celular': ['300', '301', '302', '304', '305', '310', '311', '312', '313', '314', '320', '321', '322', '323', '350']},
+    'Barranquilla': {'indicativo_fijo': '605', 'prefijos_celular': ['300', '301', '302', '304', '305', '310', '311', '312', '313', '314', '320', '321', '322', '323', '350']},
+    'Cartagena': {'indicativo_fijo': '605', 'prefijos_celular': ['300', '301', '302', '304', '305', '310', '311', '312', '313', '314', '320', '321', '322', '323', '350']},
+    'Bucaramanga': {'indicativo_fijo': '607', 'prefijos_celular': ['300', '301', '302', '304', '305', '310', '311', '312', '313', '314', '320', '321', '322', '323', '350']},
+    'Cúcuta': {'indicativo_fijo': '607', 'prefijos_celular': ['300', '301', '302', '304', '305', '310', '311', '312', '313', '314', '320', '321', '322', '323', '350']},
+    'Pereira': {'indicativo_fijo': '606', 'prefijos_celular': ['300', '301', '302', '304', '305', '310', '311', '312', '313', '314', '320', '321', '322', '323', '350']},
+}
+
+# Dominios de email comunes
+dominios_email = ['gmail.com', 'hotmail.com', 'outlook.com', 'yahoo.com', 
+                  'aol.com', 'icloud.com', 'protonmail.com', 'live.com']
+
+
+common_pass = "password123"
 hashed_common_pass = generate_password_hash(common_pass, method='pbkdf2:sha256')
 
 # Lista de medicamentos (similar a la de init_db.py)
@@ -167,19 +197,30 @@ def limpiar_tablas(conn):
 def insertar_usuarios_lote(conn, usuarios_a_insertar):
     cur = conn.cursor()
     print(f"Intentando insertar {len(usuarios_a_insertar)} usuarios...")
+    # Ajusta la sentencia SQL para incluir los nuevos campos
+    sql_insert_usuario = """
+        INSERT INTO usuarios (
+            nombre, cedula, email, contrasena, rol, estado_usuario,
+            fecha_nacimiento, telefono, ciudad, fecha_registro
+        )
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        ON CONFLICT (cedula) DO NOTHING; 
+    """
     for usuario in usuarios_a_insertar:
         try:
             cur.execute(
-                """
-                INSERT INTO usuarios (nombre, cedula, email, contrasena, rol, estado_usuario)
-                VALUES (%s, %s, %s, %s, %s, %s)
-                ON CONFLICT (cedula) DO NOTHING; 
-                """,
-                (usuario['nombre'], usuario['cedula'], usuario['email'], 
-                 usuario['contrasena'], usuario['rol'], usuario['estado_usuario'])
+                sql_insert_usuario,
+                (
+                    usuario['nombre'], usuario['cedula'], usuario['email'], 
+                    usuario['contrasena'], usuario['rol'], usuario['estado_usuario'],
+                    usuario.get('fecha_nacimiento'), # .get para manejar si algún admin no lo tiene
+                    usuario.get('telefono'),
+                    usuario.get('ciudad'),
+                    usuario.get('fecha_registro')
+                )
             )
         except psycopg2.Error as e:
-            print(f"Error al insertar usuario {usuario['cedula']}: {e}")
+            print(f"Error al insertar usuario {usuario.get('cedula', 'Desconocido')}: {e}")
             conn.rollback() 
     conn.commit()
     print(f"Inserción de lote de usuarios completada.")
@@ -277,42 +318,76 @@ def insertar_alertas_lote(conn, num_alertas):
     print(f"{alertas_insertadas} alertas insertadas.")
     cur.close()
 
+def generar_fecha_nacimiento_realista(edad_min=18, edad_max=80):
+    """Genera una fecha de nacimiento aleatoria para alguien entre edad_min y edad_max años."""
+    hoy = date.today()
+    año_nacimiento = hoy.year - random.randint(edad_min, edad_max)
+    mes_nacimiento = random.randint(1, 12)
+    dia_nacimiento = random.randint(1, 28 if mes_nacimiento == 2 else 30 if mes_nacimiento in [4, 6, 9, 11] else 31)
+    return date(año_nacimiento, mes_nacimiento, dia_nacimiento)
+
+def generar_numero_telefono_colombiano(ciudad_info):
+    """Genera un número de teléfono colombiano (celular o fijo basado en ciudad)."""
+    if random.choice([True, False, True]):  # Mayor probabilidad para celular
+        prefijo = random.choice(ciudad_info['prefijos_celular'])
+        numero = prefijo + str(random.randint(1000000, 9999999))
+    else:  # Fijo
+        numero = ciudad_info['indicativo_fijo'] + str(random.randint(1000000, 9999999))
+    return numero
 
 def main():
     conn = None
     try:
         conn = get_db_connection()
         print("Conexión a la base de datos establecida.")
-
-        # --- Limpiar Tablas ---
         limpiar_tablas(conn)
 
         # --- Generar e Insertar Administradores ---
         admins_a_insertar = []
-        for i in range(1, 6): 
-            nombre_admin = f"Admin {random.choice(first_names)} {random.choice(last_names)}"
-            cedula_admin = f"ADM{i:04d}{random.randint(100,999)}"
-            email_admin = f"admin{i}{random.randint(100,999)}@medialert.co"
-            admins_a_insertar.append({
-                'nombre': nombre_admin, 'cedula': cedula_admin, 'email': email_admin,
-                'contrasena': hashed_common_pass, 'rol': 'admin', 'estado_usuario': 'activo'
-            })
+        admin_nombre_completo = f"{random.choice(all_first_names)} {random.choice(last_names)}"
         admins_a_insertar.append({
-            'nombre': "Admin Script Original", 'cedula': "admin999", 'email': "adminscript@medialert.co",
-            'contrasena': generate_password_hash("1234", method='pbkdf2:sha256'), 'rol': 'admin', 'estado_usuario': 'activo'
+            'nombre': admin_nombre_completo,
+            'cedula': f"ADM{random.randint(10000, 99999)}",
+            'email': f"admin{random.randint(1,100)}@medialert.co",
+            'contrasena': generate_password_hash("adminpass123", method='pbkdf2:sha256'),
+            'rol': 'admin',
+            'estado_usuario': 'activo',
+            'fecha_nacimiento': None,
+            'telefono': None,
+            'ciudad': None,
+            'fecha_registro': datetime.now().strftime('%Y-%m-%d')
         })
         insertar_usuarios_lote(conn, admins_a_insertar)
 
         # --- Generar e Insertar Clientes ---
         clientes_a_insertar = []
-        for i in range(1, 151): 
-            nombre_cliente = f"{random.choice(first_names)} {random.choice(last_names)}"
-            cedula_cliente = f"CL{i:05d}{random.randint(1000,9999)}"
-            email_cliente = f"cliente{i}{random.randint(1000,9999)}@example.com"
-            estado_cliente = random.choices(['activo', 'inactivo'], weights=[0.85, 0.15], k=1)[0]
+        for i in range(1, 151):
+            nombre_base = random.choice(all_first_names)
+            apellido1 = random.choice(last_names)
+            apellido2 = random.choice(last_names)
+            nombre_cliente = f"{nombre_base} {apellido1}" if random.choice([True, False]) else f"{nombre_base} {apellido1} {apellido2}"
+            cedula_cliente = str(random.randint(10000000, 1999999999))[:10]
+            nombre_para_email = nombre_base.lower().split(" ")[0]
+            apellido_para_email = apellido1.lower()
+            separador_email = random.choice(['.', '_', ''])
+            email_cliente = f"{nombre_para_email}{separador_email}{apellido_para_email}{random.randint(1,99)}@{random.choice(dominios_email)}"
+            fecha_registro_dt = datetime.now() - timedelta(days=random.randint(0, 3*365))
+            estado_cliente = random.choices(['activo', 'inactivo'], weights=[0.9, 0.1], k=1)[0]
+            fecha_nacimiento_cliente = generar_fecha_nacimiento_realista()
+            ciudad_nombre, ciudad_data = random.choice(list(ciudades_colombia.items()))
+            telefono_cliente = generar_numero_telefono_colombiano(ciudad_data)
+
             clientes_a_insertar.append({
-                'nombre': nombre_cliente, 'cedula': cedula_cliente, 'email': email_cliente,
-                'contrasena': hashed_common_pass, 'rol': 'cliente', 'estado_usuario': estado_cliente
+                'nombre': nombre_cliente,
+                'cedula': cedula_cliente,
+                'email': email_cliente,
+                'contrasena': hashed_common_pass,
+                'rol': 'cliente',
+                'estado_usuario': estado_cliente,
+                'fecha_nacimiento': fecha_nacimiento_cliente.strftime('%Y-%m-%d'),
+                'telefono': telefono_cliente,
+                'ciudad': ciudad_nombre,
+                'fecha_registro': fecha_registro_dt.strftime('%Y-%m-%d')
             })
         insertar_usuarios_lote(conn, clientes_a_insertar)
 
@@ -326,16 +401,12 @@ def main():
 
     except psycopg2.OperationalError as e:
         print(f"\nError operacional de PostgreSQL: {e}")
-        print("Verifica que el servidor PostgreSQL esté corriendo y accesible,")
-        print(f"y que la base de datos '{PG_DB}' exista.")
     except psycopg2.Error as e:
         print(f"\nOcurrió un error de PostgreSQL durante la población: {e}")
-        if conn:
-            conn.rollback()
+        if conn: conn.rollback()
     except Exception as e:
         print(f"\nOcurrió un error general inesperado: {e}")
-        if conn:
-            conn.rollback()
+        if conn: conn.rollback()
     finally:
         if conn:
             conn.close()
