@@ -5,11 +5,6 @@ document.addEventListener('DOMContentLoaded', () => { // Es una buena práctica 
             e.preventDefault();
             const cedula = document.getElementById('cedula').value;
             const contrasena = document.getElementById('contrasena').value;
-            const errorMessage = document.getElementById('error-message');
-
-            // Limpiar mensaje de error previo
-            errorMessage.classList.add('d-none');
-            errorMessage.textContent = '';
 
             try {
                 const response = await fetch('/api/login', {
@@ -24,18 +19,20 @@ document.addEventListener('DOMContentLoaded', () => { // Es una buena práctica 
                     throw new Error(data.error || 'Error desconocido al intentar iniciar sesión.');
                 }
 
-                // Redirigir según el rol
-                if (data.rol === 'admin') {
-                    window.location.href = '/admin.html';
-                } else if (data.rol === 'cliente') {
-                    window.location.href = '/client.html';
-                } else {
-                    throw new Error('Rol de usuario no reconocido.');
-                }
-
+                // Login exitoso
+                showGlobalNotification('Inicio de Sesión Exitoso', 'Será redirigido en unos momentos...', 'success');
+                setTimeout(() => {
+                    if (data.rol === 'admin') {
+                        window.location.href = '/admin.html';
+                    } else if (data.rol === 'cliente') {
+                        window.location.href = '/client.html';
+                    } else {
+                        showGlobalNotification('Error de Redirección', 'Rol de usuario no reconocido.', 'error');
+                    }
+                }, 1500);
             } catch (error) {
-                errorMessage.textContent = error.message;
-                errorMessage.classList.remove('d-none');
+                // Error en el inicio de sesión
+                showGlobalNotification('Error de Inicio de Sesión', error.message, 'error');
             }
         });
     }

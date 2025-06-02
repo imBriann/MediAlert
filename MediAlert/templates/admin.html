@@ -16,12 +16,15 @@
             transform: translateY(-5px);
             box-shadow: 0 4px 15px rgba(0,0,0,0.1);
         }
-        /* Ajuste para que las columnas de la tabla de clientes no se compriman demasiado */
         #clientes-table-body td, #clientes-table-body th {
-            white-space: nowrap; /* Evita que el texto se divida en múltiples líneas */
+            white-space: nowrap; 
         }
         .table-responsive {
-            overflow-x: auto; /* Permite scroll horizontal si es necesario */
+            overflow-x: auto; 
+        }
+        /* Custom style for search bar width */
+        .search-bar-container {
+            width: 320px; /* Adjust as needed, or use Bootstrap width classes like w-50, w-auto */
         }
     </style>
 </head>
@@ -57,11 +60,19 @@
         <main class="w-100 p-4 ms-280">
             <div id="view-clientes" class="view-content">
                 <h1>Gestión de Clientes</h1>
-                <button class="btn btn-primary mb-3" id="btn-add-cliente"><i class="bi bi-plus-circle"></i> Agregar Cliente</button>
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <button class="btn btn-primary" id="btn-add-cliente"><i class="bi bi-plus-circle"></i> Agregar Cliente</button>
+                    <div class="search-bar-container ms-3">
+                        <div class="input-group input-group-sm">
+                            <span class="input-group-text" id="search-addon-clientes"><i class="bi bi-search"></i></span>
+                            <input type="text" id="search-clientes" class="form-control" placeholder="Buscar por nombre o cédula..." aria-label="Buscar clientes" aria-describedby="search-addon-clientes">
+                        </div>
+                    </div>
+                </div>
                 <div id="clientes-card-container" class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
                 </div>
             </div>
-            <!-- New Client Detail Modal -->
+            
             <div class="modal fade" id="clientDetailModal" tabindex="-1" aria-labelledby="clientDetailModalLabel" aria-hidden="true">
                 <div class="modal-dialog modal-xl">
                     <div class="modal-content">
@@ -101,7 +112,15 @@
 
             <div id="view-medicamentos" class="view-content" style="display: none;">
                 <h1>Gestión de Medicamentos</h1>
-                <button class="btn btn-primary mb-3" id="btn-add-medicamento"><i class="bi bi-plus-circle"></i> Agregar Medicamento</button>
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <button class="btn btn-primary" id="btn-add-medicamento"><i class="bi bi-plus-circle"></i> Agregar Medicamento</button>
+                    <div class="search-bar-container ms-3">
+                        <div class="input-group input-group-sm">
+                            <span class="input-group-text" id="search-addon-medicamentos"><i class="bi bi-search"></i></span>
+                            <input type="text" id="search-medicamentos" class="form-control" placeholder="Buscar por nombre de medicamento..." aria-label="Buscar medicamentos" aria-describedby="search-addon-medicamentos">
+                        </div>
+                    </div>
+                </div>
                 <div class="table-responsive">
                     <table class="table table-hover">
                         <thead><tr><th>Nombre</th><th>Descripción</th><th>Composición</th><th>Estado</th><th>Acciones</th></tr></thead>
@@ -112,12 +131,20 @@
             
             <div id="view-alertas" class="view-content" style="display: none;">
                 <h1>Gestión de Alertas</h1>
-                <button class="btn btn-primary mb-3" id="btn-add-alerta"><i class="bi bi-plus-circle"></i> Asignar Alerta</button>
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <button class="btn btn-primary" id="btn-add-alerta"><i class="bi bi-plus-circle"></i> Asignar Alerta</button>
+                    <div class="search-bar-container ms-3">
+                        <div class="input-group input-group-sm">
+                            <span class="input-group-text" id="search-addon-alertas"><i class="bi bi-search"></i></span>
+                            <input type="text" id="search-alertas" class="form-control" placeholder="Buscar por medicamento, cliente (nombre/cédula)..." aria-label="Buscar alertas" aria-describedby="search-addon-alertas">
+                        </div>
+                    </div>
+                </div>
                 <div class="table-responsive">
                     <table class="table table-hover">
                         <thead>
                             <tr>
-                                <th>Cliente</th><th>Medicamento</th><th>Dosis</th><th>Frecuencia</th>
+                                <th>Cliente</th><th>Cédula Cliente</th><th>Medicamento</th><th>Dosis</th><th>Frecuencia</th>
                                 <th>Fecha Inicio</th><th>Fecha Fin</th><th>Hora Preferida</th><th>Estado Alerta</th>
                                 <th>Acciones</th>
                             </tr>
@@ -129,10 +156,10 @@
 
             <div id="view-auditoria" class="view-content" style="display: none;">
                 <h1>Auditoría del Sistema</h1>
-                <div class="d-flex justify-content-between align-items-center mb-3">
-                    <div>
-                        <label for="auditoria-filter" class="form-label me-2">Filtrar por Módulo:</label>
-                        <select id="auditoria-filter" class="form-select form-select-sm d-inline-block w-auto">
+                <div class="row mb-3 gy-2">
+                    <div class="col-md-6">
+                        <label for="auditoria-filter-module" class="form-label">Filtrar por Módulo:</label>
+                        <select id="auditoria-filter-module" class="form-select form-select-sm">
                             <option value="">Todo</option>
                             <option value="usuarios">Usuarios/Clientes</option>
                             <option value="medicamentos">Medicamentos</option>
@@ -141,15 +168,26 @@
                             <option value="reportes_log">Log de Reportes</option>
                         </select>
                     </div>
+                    <div class="col-md-6">
+                        <label for="search-auditoria" class="form-label">Buscar por Usuario (Nombre/Cédula):</label>
+                        <div class="input-group input-group-sm">
+                            <span class="input-group-text" id="search-addon-auditoria"><i class="bi bi-search"></i></span>
+                            <input type="text" id="search-auditoria" class="form-control" placeholder="Nombre o cédula del usuario..." aria-label="Buscar en auditoría" aria-describedby="search-addon-auditoria">
+                        </div>
+                    </div>
                 </div>
                 <div class="table-responsive">
                     <table class="table table-hover table-bordered align-middle">
                         <thead class="table-dark">
                             <tr>
-                                <th style="width: 15%;">Fecha y Hora</th><th style="width: 10%;">Usuario</th>
-                                <th style="width: 15%;">Acción</th><th style="width: 10%;">Módulo</th>
-                                <th style="width: 10%;">ID Afectado</th><th style="width: 25%;">Cambios Clave</th>
-                                <th style="width: 15%;">Detalles Adicionales</th>
+                                <th style="width: 15%;">Fecha y Hora</th>
+                                <th style="width: 10%;">Usuario</th>
+                                <th style="width: 8%;">Cédula Usuario</th>
+                                <th style="width: 15%;">Acción</th>
+                                <th style="width: 10%;">Módulo</th>
+                                <th style="width: 10%;">ID Afectado</th>
+                                <th style="width: 20%;">Cambios Clave</th>
+                                <th style="width: 12%;">Detalles Adicionales</th>
                             </tr>
                         </thead>
                         <tbody id="auditoria-table-body" class="table-group-divider"></tbody>
@@ -159,7 +197,6 @@
 
             <div id="view-reportes" class="view-content" style="display: none;">
                 <h1>Gestión de Reportes</h1>
-                
                 <section class="mb-5">
                     <h2 class="h4 mb-3">Generar Nuevo Reporte</h2>
                     <div class="row row-cols-1 row-cols-md-2 row-cols-lg-4 g-3">
@@ -201,7 +238,6 @@
                         </div>
                     </div>
                 </section>
-
                 <section>
                     <h2 class="h4 my-4">Historial de Reportes Generados (Últimos 50)</h2>
                     <div class="table-responsive">
@@ -405,12 +441,28 @@
             </div>
         </div>
     </div>
+    <div class="modal fade" id="notificationModal" tabindex="-1" aria-labelledby="notificationModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+            <div class="modal-header" id="notificationModalHeader">
+                <h5 class="modal-title" id="notificationModalLabel">Notificación</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="notificationModalBody">
+                </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Cerrar</button>
+            </div>
+            </div>
+        </div>
+    </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 
     <script src="{{ url_for('static', filename='js/theme.js') }}"></script> 
+    <script src="{{ url_for('static', filename='js/shared-utils.js') }}"></script>
     <script src="{{ url_for('static', filename='js/admin-data-handlers.js') }}"></script>
     <script src="{{ url_for('static', filename='js/admin-ui-handlers.js') }}"></script>
     <script src="{{ url_for('static', filename='js/admin-form-handlers.js') }}"></script>

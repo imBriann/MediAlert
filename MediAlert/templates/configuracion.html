@@ -8,23 +8,22 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <style>
-        body { display: flex; min-height: 100vh; }
-        .sidebar { width: 280px; flex-shrink: 0; background-color: var(--bs-tertiary-bg); }
+        /* body { display: flex; min-height: 100vh; } */ /* Removed as it might conflict with simpler top nav */
+        /* .sidebar { width: 280px; flex-shrink: 0; background-color: var(--bs-tertiary-bg); } */ /* Not using admin sidebar here */
         .main-content { flex-grow: 1; }
-        .nav-link.active { background-color: var(--bs-primary-bg-subtle) !important; border-right: 3px solid var(--bs-primary); font-weight: bold; }
-        
+        /* .nav-link.active { background-color: var(--bs-primary-bg-subtle) !important; border-right: 3px solid var(--bs-primary); font-weight: bold; } */
     </style>
 </head>
 <body>
 
-<nav class="navbar navbar-expand-lg bg-body-tertiary">
+<nav class="navbar navbar-expand-lg navbar-dark bg-dark">
     <div class="container-fluid">
         <a class="navbar-brand" href="/"><i class="bi bi-heart-pulse-fill"></i> MediAlert - Configuración</a>
         <div class="d-flex align-items-center">
             <button class="btn btn-outline-secondary me-2" id="theme-toggler" type="button" title="Cambiar tema">
                 <i class="bi bi-sun-fill"></i>
             </button>
-            <a href="/" class="btn btn-outline-primary me-2">Volver</a>
+            <a href="/" class="btn btn-outline-primary me-2">Volver al Panel</a>
         </div>
     </div>
 </nav>
@@ -33,9 +32,10 @@
     <div class="row justify-content-center">
         <div class="col-lg-8 col-xl-7">
             <h1 class="h2 mb-4">Configuración</h1>            
-            <form id="configForm">
-                <section class="mb-4 p-3 border rounded">
-                    <h3 class="h5 mb-3">Información de la Cuenta</h3>
+            
+            <section class="mb-4 p-3 border rounded bg-body-tertiary">
+                <h3 class="h5 mb-3">Información de la Cuenta</h3>
+                <form id="configForm">
                     <div class="mb-3">
                         <label for="configNombre" class="form-label">Nombre</label>
                         <input type="text" class="form-control" id="configNombre" placeholder="Cargando..." readonly>
@@ -48,12 +48,12 @@
                         <label for="configRol" class="form-label">Rol</label>
                         <input type="text" class="form-control" id="configRol" placeholder="Cargando..." readonly>
                     </div>
-                </section>
-            </form>
+                </form>
+            </section>
 
             <hr class="my-4">
 
-            <section class="mb-4 p-3 border rounded">
+            <section class="mb-4 p-3 border rounded bg-body-tertiary">
                 <h3 class="h5 mb-3">Cambiar Contraseña</h3>
                 <form id="changePasswordForm">
                     <div class="mb-3">
@@ -73,7 +73,7 @@
                 </form>
             </section>
 
-            <section class="mb-4 p-3 border rounded">
+            <section class="mb-4 p-3 border rounded bg-body-tertiary">
                 <h3 class="h5 mb-3">Preferencias de Notificaciones (Próximamente)</h3>
                 <div class="form-check form-switch mb-2">
                     <input class="form-check-input" type="checkbox" role="switch" id="email-notifications" disabled>
@@ -88,15 +88,30 @@
             <div class="alert alert-success d-none mt-3" id="successMessage" role="alert"></div>
             <div class="alert alert-danger d-none mt-3" id="errorMessage" role="alert"></div>
 
-            <div class="text-center mt-4">
-                <button type="button" class="btn btn-secondary" onclick="history.back()">Volver</button>
+            <div class="text-center mt-4 mb-4"> <button type="button" class="btn btn-secondary" onclick="history.back()">Volver</button>
             </div>
         </div>
     </div>
 </main>
+    <div class="modal fade" id="notificationModal" tabindex="-1" aria-labelledby="notificationModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+            <div class="modal-header" id="notificationModalHeader">
+                <h5 class="modal-title" id="notificationModalLabel">Notificación</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="notificationModalBody">
+                </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Cerrar</button>
+            </div>
+            </div>
+        </div>
+    </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script src="{{ url_for('static', filename='js/theme.js') }}"></script>
+<script src="{{ url_for('static', filename='js/shared-utils.js') }}"></script>
 <script src="{{ url_for('static', filename='js/configuracion.js') }}"></script>
 </body>
 </html>

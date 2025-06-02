@@ -4,19 +4,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     const configEmail = document.getElementById('configEmail');
     const configRol = document.getElementById('configRol');
     const changePasswordForm = document.getElementById('changePasswordForm');
-    const successMessageDiv = document.getElementById('successMessage');
-    const errorMessageDiv = document.getElementById('errorMessage');
 
-    function showMessage(element, message, isSuccess = true) {
-        element.textContent = message;
-        element.classList.remove('d-none', isSuccess ? 'alert-danger' : 'alert-success');
-        element.classList.add(isSuccess ? 'alert-success' : 'alert-danger');
-        setTimeout(() => {
-            element.classList.add('d-none');
-        }, 5000);
-    }
-
-    // Cargar datos del usuario
+    // Load user data
     try {
         const response = await fetch('/api/configuracion/usuario');
         if (!response.ok) {
@@ -27,32 +16,29 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (configNombre) configNombre.value = userData.nombre || '';
         if (configEmail) configEmail.value = userData.email || '';
         if (configRol) configRol.value = userData.rol ? userData.rol.charAt(0).toUpperCase() + userData.rol.slice(1) : '';
-
     } catch (error) {
         console.error('Error al cargar datos del usuario:', error);
         if (configNombre) configNombre.value = 'Error al cargar';
         if (configEmail) configEmail.value = 'Error al cargar';
         if (configRol) configRol.value = 'Error al cargar';
-        showMessage(errorMessageDiv, error.message, false);
+        showGlobalNotification('Error de Carga', error.message, 'error');
     }
 
-    // Manejar cambio de contraseña
+    // Handle password change
     if (changePasswordForm) {
         changePasswordForm.addEventListener('submit', async (e) => {
             e.preventDefault();
-            successMessageDiv.classList.add('d-none');
-            errorMessageDiv.classList.add('d-none');
 
             const contrasenaActual = document.getElementById('contrasenaActual').value;
             const contrasenaNueva = document.getElementById('contrasenaNueva').value;
             const contrasenaNuevaConfirmacion = document.getElementById('contrasenaNuevaConfirmacion').value;
 
             if (contrasenaNueva !== contrasenaNuevaConfirmacion) {
-                showMessage(errorMessageDiv, 'La nueva contraseña y su confirmación no coinciden.', false);
+                showGlobalNotification('Error de Contraseña', 'La nueva contraseña y su confirmación no coinciden.', 'error');
                 return;
             }
-             if (contrasenaNueva.length < 6) {
-                showMessage(errorMessageDiv, 'La nueva contraseña debe tener al menos 6 caracteres.', false);
+            if (contrasenaNueva.length < 6) {
+                showGlobalNotification('Error de Contraseña', 'La nueva contraseña debe tener al menos 6 caracteres.', 'error');
                 return;
             }
 
@@ -70,12 +56,11 @@ document.addEventListener('DOMContentLoaded', async () => {
                 if (!response.ok) {
                     throw new Error(responseData.error || 'Error al cambiar la contraseña.');
                 }
-                showMessage(successMessageDiv, responseData.message || 'Contraseña cambiada con éxito.');
+                showGlobalNotification('Cambio de Contraseña', responseData.message || 'Contraseña cambiada con éxito.', 'success');
                 changePasswordForm.reset();
-
             } catch (error) {
                 console.error('Error al cambiar contraseña:', error);
-                showMessage(errorMessageDiv, error.message, false);
+                showGlobalNotification('Error de Contraseña', error.message, 'error');
             }
         });
     }

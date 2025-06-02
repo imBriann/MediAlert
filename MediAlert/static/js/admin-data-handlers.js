@@ -1,5 +1,11 @@
 // static/js/admin-data-handlers.js
 
+// Store original data to filter client-side
+let originalClientesData = [];
+let originalMedicamentosData = [];
+let originalAlertasData = [];
+let originalAuditoriaData = [];
+
 async function fetchData(url, errorMessagePrefix) {
     try {
         const response = await fetch(url);
@@ -93,21 +99,30 @@ function formatTime(timeString) {
 }
 
 
-async function loadClientes() {
+async function loadClientes(searchTerm = '') {
     const cardContainer = document.getElementById('clientes-card-container');
     if (!cardContainer) {
         console.error("Elemento 'clientes-card-container' no encontrado.");
         return;
     }
     try {
-        // Fetch only clients
-        const clientes = await fetchData('/api/admin/clientes?rol=cliente&estado=todos', 'Error al cargar clientes');
-        cardContainer.innerHTML = ''; // Clear previous cards
+        if (originalClientesData.length === 0) { // Fetch only if not already fetched
+            originalClientesData = await fetchData('/api/admin/clientes?rol=cliente&estado=todos', 'Error al cargar clientes');
+        }
+        
+        const normalizedSearchTerm = searchTerm.toLowerCase().trim();
+        const filteredClientes = originalClientesData.filter(c => {
+            const nombre = c.nombre ? c.nombre.toLowerCase() : '';
+            const cedula = c.cedula ? c.cedula.toLowerCase() : '';
+            return nombre.includes(normalizedSearchTerm) || cedula.includes(normalizedSearchTerm);
+        });
 
-        if (!clientes || clientes.length === 0) {
-            cardContainer.innerHTML = '<div class="col-12"><p class="text-center">No hay clientes registrados.</p></div>';
+        cardContainer.innerHTML = ''; 
+
+        if (!filteredClientes || filteredClientes.length === 0) {
+            cardContainer.innerHTML = `<div class="col-12"><p class="text-center">No hay clientes ${normalizedSearchTerm ? 'que coincidan con la búsqueda' : 'registrados'}.</p></div>`;
         } else {
-            clientes.forEach(c => {
+            filteredClientes.forEach(c => {
                 const estadoBadgeClass = c.estado_usuario === 'activo' ? 'bg-success' : 'bg-danger';
                 const toggleButtonIcon = c.estado_usuario === 'activo' ? 'bi-person-slash' : 'bi-person-check';
                 const toggleButtonText = c.estado_usuario === 'activo' ? 'Desactivar' : 'Reactivar';
@@ -185,24 +200,38 @@ async function loadMedicamentos() {
     }
 }
 
-async function loadAlertas() {
+async function loadAlertas(searchTerm = '') {
     const tableBody = document.getElementById('alertas-table-body');
     if (!tableBody) {
         console.error("Elemento 'alertas-table-body' no encontrado.");
         return;
     }
     try {
-        const alertas = await fetchData('/api/admin/alertas', 'Error al cargar alertas');
+        if (originalAlertasData.length === 0) {
+            originalAlertasData = await fetchData('/api/admin/alertas', 'Error al cargar alertas');
+        }
+        
+        const normalizedSearchTerm = searchTerm.toLowerCase().trim();
+        const filteredAlertas = originalAlertasData.filter(a => {
+            const clienteNombre = a.cliente_nombre ? a.cliente_nombre.toLowerCase() : '';
+            const clienteCedula = a.cliente_cedula ? a.cliente_cedula.toLowerCase() : ''; // Asegúrate que la API provea cliente_cedula
+            const medicamentoNombre = a.medicamento_nombre ? a.medicamento_nombre.toLowerCase() : '';
+            return clienteNombre.includes(normalizedSearchTerm) || 
+                   clienteCedula.includes(normalizedSearchTerm) ||
+                   medicamentoNombre.includes(normalizedSearchTerm);
+        });
+
         tableBody.innerHTML = ''; 
 
-        if (!alertas || alertas.length === 0) {
-            tableBody.innerHTML = '<tr><td colspan="9" class="text-center">No hay alertas registradas.</td></tr>';
+        if (!filteredAlertas || filteredAlertas.length === 0) {
+            tableBody.innerHTML = `<tr><td colspan="10" class="text-center">No hay alertas ${normalizedSearchTerm ? 'que coincidan con la búsqueda' : 'registradas'}.</td></tr>`;
             return;
         }
 
-        alertas.forEach(a => {
+        filteredAlertas.forEach(a => {
             const row = tableBody.insertRow();
             row.insertCell().textContent = a.cliente_nombre || 'N/A';
+            row.insertCell().textContent = a.cliente_cedula || 'N/A'; // New cell for Cédula
             row.insertCell().textContent = a.medicamento_nombre || 'N/A';
             row.insertCell().textContent = a.dosis || 'N/A';
             row.insertCell().textContent = a.frecuencia || 'N/A';
@@ -227,7 +256,7 @@ async function loadAlertas() {
             `;
         });
     } catch (error) {
-         renderErrorRow(tableBody, 9, error);
+         renderErrorRow(tableBody, 10, error); // Colspan updated to 10
     }
 }
 
@@ -428,4 +457,12 @@ async function loadReportesLog() {
     } catch (error) {
         renderErrorRow(tableBody, 5, error); 
     }
+}
+
+// Function to reset original data stores, can be called on full page reloads or manual refresh actions
+function resetOriginalData() {
+    originalClientesData = [];
+    originalMedicamentosData = [];
+    originalAlertasData = [];
+    originalAuditoriaData = [];
 }

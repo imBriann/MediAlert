@@ -23,7 +23,8 @@ document.addEventListener('DOMContentLoaded', () => {
             if(adminNameEl) adminNameEl.textContent = data.nombre || 'Admin';
             
             if(typeof showView === 'function') {
-                showView('view-clientes'); // Carga la vista inicial
+                 resetOriginalData(); // Clear any cached data from previous sessions/loads
+                showView('view-clientes'); 
             } else {
                 console.error("La función showView no está definida.");
             }
@@ -40,16 +41,69 @@ document.addEventListener('DOMContentLoaded', () => {
     window.alertaModal = document.getElementById('alertaModal') ? new bootstrap.Modal(document.getElementById('alertaModal')) : null;
     window.clientDetailModalInstance = document.getElementById('clientDetailModal') ? new bootstrap.Modal(document.getElementById('clientDetailModal')) : null;
 
+    // --- Search Event Listeners ---
+    const searchClientesInput = document.getElementById('search-clientes');
+    if (searchClientesInput) {
+        searchClientesInput.addEventListener('input', () => {
+            if (typeof loadClientes === 'function') loadClientes(searchClientesInput.value);
+        });
+    }
+
+    const searchMedicamentosInput = document.getElementById('search-medicamentos');
+    if (searchMedicamentosInput) {
+        searchMedicamentosInput.addEventListener('input', () => {
+            if (typeof loadMedicamentos === 'function') loadMedicamentos(searchMedicamentosInput.value);
+        });
+    }
+
+    const searchAlertasInput = document.getElementById('search-alertas');
+    if (searchAlertasInput) {
+        searchAlertasInput.addEventListener('input', () => {
+            if (typeof loadAlertas === 'function') loadAlertas(searchAlertasInput.value);
+        });
+    }
+
+    const searchAuditoriaInput = document.getElementById('search-auditoria');
+    const auditoriaModuleFilter = document.getElementById('auditoria-filter-module');
+
+    function triggerAuditoriaLoad() {
+        const moduleFilterValue = auditoriaModuleFilter ? auditoriaModuleFilter.value : '';
+        const userSearchTermValue = searchAuditoriaInput ? searchAuditoriaInput.value : '';
+        if (typeof loadAuditoria === 'function') {
+            loadAuditoria(moduleFilterValue, userSearchTermValue);
+        }
+    }
+
+    if (searchAuditoriaInput) {
+        searchAuditoriaInput.addEventListener('input', triggerAuditoriaLoad);
+    }
+    if (auditoriaModuleFilter) { // Listener for module filter was in admin-ui-handlers.js, ensure it calls combined load
+        auditoriaModuleFilter.removeEventListener('change', window.handleAuditoriaModuleFilterChange); // Remove old if exists
+        window.handleAuditoriaModuleFilterChange = triggerAuditoriaLoad; // Assign new handler
+        auditoriaModuleFilter.addEventListener('change', window.handleAuditoriaModuleFilterChange);
+    }
+
+
     // --- Delegación de Eventos Principal ---
     document.body.addEventListener('click', async (e) => {
-        const targetElement = e.target.closest('button, a, div.report-option-card'); // Incluir las cards de reporte
+        const targetElement = e.target.closest('button, a, div.report-option-card'); 
         if (!targetElement) return;
 
         // Navegación Sidebar
         if (targetElement.matches('.sidebar .nav-link')) {
             e.preventDefault();
             const viewId = targetElement.dataset.view;
-            if (viewId && typeof showView === 'function') showView(viewId);
+            if (viewId && typeof showView === 'function') {
+                // Reset search fields when changing views
+                if (searchClientesInput) searchClientesInput.value = '';
+                if (searchMedicamentosInput) searchMedicamentosInput.value = '';
+                if (searchAlertasInput) searchAlertasInput.value = '';
+                if (searchAuditoriaInput) searchAuditoriaInput.value = '';
+                if (auditoriaModuleFilter) auditoriaModuleFilter.value = '';
+                
+                resetOriginalData(); // Force re-fetch or use fresh data for the new view
+                showView(viewId);
+            }
         }
 
         // Cierre de Sesión y Tema
@@ -63,11 +117,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 alert("Error al cerrar sesión.");
             }
         }
-        if (targetElement.matches('#theme-toggler-admin')) { // Específico para admin si es necesario, o usa el global de theme.js
-             // theme.js maneja el cambio de tema globalmente.
-             // Si este botón tiene lógica específica adicional, agrégala aquí.
-             // De lo contrario, asegúrate que theme.js esté funcionando.
-        }
+        // Theme toggler is handled by theme.js generally or can be here if specific logic needed for #theme-toggler within admin dropdown
 
 
         // Botones "Agregar"
@@ -76,16 +126,14 @@ document.addEventListener('DOMContentLoaded', () => {
         if (targetElement.matches('#btn-add-alerta') && typeof openAlertaModal === 'function') openAlertaModal();
 
         // --- Client Card Actions ---
-        // Edit Cliente
         if (targetElement.matches('.btn-edit-cliente') && typeof openClienteModal === 'function') {
             openClienteModal(targetElement.dataset.id);
         }
 
-        // Toggle Cliente Status
         if (targetElement.matches('.btn-toggle-status-cliente')) {
             const id = targetElement.dataset.id;
             const nombre = targetElement.dataset.nombre || 'este cliente';
-            const currentStatus = targetElement.dataset.status; // Get status from data-status attribute
+            const currentStatus = targetElement.dataset.status; 
             const newStatus = currentStatus === 'activo' ? 'inactivo' : 'activo';
             const actionText = newStatus === 'inactivo' ? 'desactivar' : 'reactivar';
 
@@ -98,24 +146,25 @@ document.addEventListener('DOMContentLoaded', () => {
                     });
                     const responseData = await response.json();
                     if (!response.ok) throw new Error(responseData.error || `Error al ${actionText} cliente.`);
-                    alert(responseData.message || `Cliente ${actionText} con éxito.`);
+
+                    // Use global notification modal
+                    showGlobalNotification('Actualización de Cliente', responseData.message || `Cliente ${actionText} con éxito.`, 'success');
+
                     if (typeof loadClientes === 'function') loadClientes(); // Reload cards
                 } catch (error) {
                     console.error(`Error al ${actionText} cliente:`, error);
-                    alert(`Error al ${actionText} cliente: ${error.message}`);
+                    // Use global notification modal
+                    showGlobalNotification('Error de Actualización', `Error al ${actionText} cliente: ${error.message}`, 'error');
                 }
             }
         }
 
-        // View Client Details
         if (targetElement.matches('.btn-view-cliente') && typeof openClientDetailModal === 'function') {
             openClientDetailModal(targetElement.dataset.id);
         }
 
-        // Click on Card Body to View Details
         const clickableCardArea = targetElement.closest('.client-card-clickable-area');
         if (clickableCardArea) {
-            // Check if the click was on a button inside this area, if so, let that button's handler work
             if (targetElement.closest('button')) {
                 // Do nothing, let the button's specific handler take over
             } else if (clickableCardArea.dataset.id && typeof openClientDetailModal === 'function') {
@@ -127,7 +176,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (targetElement.matches('.btn-edit-medicamento') && typeof openMedicamentoModal === 'function') {
             openMedicamentoModal(targetElement.dataset.id);
         }
-        if (targetElement.matches('.btn-delete-medicamento')) { // Ahora es Discontinuar/Reactivar
+        if (targetElement.matches('.btn-delete-medicamento')) { 
             const id = targetElement.dataset.id;
             const medNombre = targetElement.dataset.nombre || 'este medicamento';
             const currentStatusIcon = targetElement.querySelector('i.bi');
@@ -144,12 +193,18 @@ document.addEventListener('DOMContentLoaded', () => {
                      });
                     const responseData = await response.json();
                     if (!response.ok) throw new Error(responseData.error || `Error al ${actionText} medicamento.`);
-                    alert(responseData.message || `Medicamento ${actionText} con éxito.`);
-                    if(typeof loadMedicamentos === 'function') loadMedicamentos();
-                    if(typeof loadAlertas === 'function') loadAlertas(); // Recargar alertas por si cambiaron de estado
+
+                    // Use global notification modal
+                    showGlobalNotification('Actualización de Medicamento', responseData.message || `Medicamento ${actionText} con éxito.`, 'success');
+
+                    originalMedicamentosData = []; // Invalidate cache
+                    if(typeof loadMedicamentos === 'function') loadMedicamentos(searchMedicamentosInput ? searchMedicamentosInput.value : '');
+                    originalAlertasData = []; // Alertas might change status
+                    if(typeof loadAlertas === 'function') loadAlertas(searchAlertasInput ? searchAlertasInput.value : '');
                 } catch (error) {
                     console.error(`Error al ${actionText} medicamento:`, error);
-                    alert(`Error al ${actionText} medicamento: ${error.message}`);
+                    // Use global notification modal
+                    showGlobalNotification('Error de Actualización', `Error al ${actionText} medicamento: ${error.message}`, 'error');
                 }
             }
         }
@@ -170,7 +225,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     const responseData = await response.json();
                     if (!response.ok) throw new Error(responseData.error || 'Error al eliminar la alerta.');
                     alert(responseData.message || 'Alerta eliminada con éxito.');
-                    if (typeof loadAlertas === 'function') loadAlertas();
+                    originalAlertasData = []; // Invalidate cache
+                    if (typeof loadAlertas === 'function') loadAlertas(searchAlertasInput ? searchAlertasInput.value : '');
                 } catch (error) {
                     console.error("Error al eliminar alerta:", error);
                     alert(`Error al eliminar alerta: ${error.message}`);
@@ -196,16 +252,31 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Manejo de Formularios ---
     const clienteFormEl = document.getElementById('clienteForm');
     if (clienteFormEl && typeof handleClienteSubmit === 'function') {
-        clienteFormEl.addEventListener('submit', handleClienteSubmit);
+        clienteFormEl.addEventListener('submit', (e) => {
+            handleClienteSubmit(e).then(() => {
+                originalClientesData = []; // Invalidate cache after submit
+                if (typeof loadClientes === 'function') loadClientes(searchClientesInput ? searchClientesInput.value : '');
+            });
+        });
     }
     
     const medicamentoFormEl = document.getElementById('medicamentoForm');
     if (medicamentoFormEl && typeof handleMedicamentoSubmit === 'function') {
-        medicamentoFormEl.addEventListener('submit', handleMedicamentoSubmit);
+        medicamentoFormEl.addEventListener('submit', (e) => {
+            handleMedicamentoSubmit(e).then(() => {
+                originalMedicamentosData = []; // Invalidate cache
+                if (typeof loadMedicamentos === 'function') loadMedicamentos(searchMedicamentosInput ? searchMedicamentosInput.value : '');
+            });
+        });
     }
 
     const alertaFormEl = document.getElementById('alertaForm');
     if (alertaFormEl && typeof handleAlertaSubmit === 'function') {
-        alertaFormEl.addEventListener('submit', handleAlertaSubmit);
+        alertaFormEl.addEventListener('submit', (e) => {
+            handleAlertaSubmit(e).then(() => {
+                originalAlertasData = []; // Invalidate cache
+                if (typeof loadAlertas === 'function') loadAlertas(searchAlertasInput ? searchAlertasInput.value : '');
+            });
+        });
     }
 });

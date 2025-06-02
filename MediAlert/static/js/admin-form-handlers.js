@@ -13,11 +13,13 @@ async function handleFormSubmit(url, method, body, successCallback, modalToHide,
         }
         if (modalToHide) modalToHide.hide();
         if (successCallback) successCallback();
-        alert(responseData.message || `${entityName} guardado con éxito.`);
 
+        // Use global notification modal for success
+        showGlobalNotification(`${entityName} Guardado`, responseData.message || `${entityName} guardado con éxito.`, 'success');
     } catch (error) {
         console.error(`Error en handle${entityName}Submit:`, error);
-        alert(`Error al guardar ${entityName}: ${error.message}`);
+        // Use global notification modal for error
+        showGlobalNotification(`Error al Guardar ${entityName}`, error.message, 'error');
     }
 }
 

@@ -257,6 +257,9 @@ def manage_clientes():
             # Validar formato de fecha_nacimiento si se provee
             if fecha_nacimiento:
                 try:
+                    # Convert to string if it's a datetime.date object
+                    if isinstance(fecha_nacimiento, date):
+                        fecha_nacimiento = fecha_nacimiento.isoformat()
                     datetime.strptime(fecha_nacimiento, '%Y-%m-%d')
                 except ValueError:
                     return jsonify({'error': 'Formato de fecha de nacimiento inválido. Use YYYY-MM-DD.'}), 400
@@ -355,6 +358,9 @@ def manage_single_cliente(uid):
             
             if fecha_nacimiento:
                 try:
+                    # Convert to string if it's a datetime.date object
+                    if isinstance(fecha_nacimiento, date):
+                        fecha_nacimiento = fecha_nacimiento.isoformat()
                     datetime.strptime(fecha_nacimiento, '%Y-%m-%d')
                 except ValueError:
                     return jsonify({'error': 'Formato de fecha de nacimiento inválido. Use YYYY-MM-DD.'}), 400
@@ -657,7 +663,8 @@ def manage_alertas_admin():
             # Build the base query
             query_parts = ["""
                 SELECT 
-                    a.id, a.usuario_id, u.nombre as cliente_nombre, u.estado_usuario,
+                    a.id, a.usuario_id, u.nombre as cliente_nombre, u.cedula as cliente_cedula,  /* MODIFIED: Added u.cedula */
+                    u.estado_usuario,
                     a.medicamento_id, m.nombre as medicamento_nombre, m.estado_medicamento,
                     a.dosis, a.frecuencia, a.fecha_inicio, a.fecha_fin, a.hora_preferida, a.estado as estado_alerta
                 FROM alertas a
@@ -681,7 +688,7 @@ def manage_alertas_admin():
             alertas = cur.fetchall()
             
             for alerta in alertas:
-                if isinstance(alerta.get('hora_preferida'), (time,)):  # Ensure proper formatting
+                if isinstance(alerta.get('hora_preferida'), (time,)):
                     alerta['hora_preferida'] = alerta['hora_preferida'].strftime('%H:%M:%S')
             return jsonify(alertas)
 
@@ -881,6 +888,7 @@ def get_auditoria_logs():
         query = """
             SELECT 
                 aud.id, aud.fecha_hora, u_app.nombre as nombre_usuario_app,
+                u_app.cedula as cedula_usuario_app,  /* MODIFIED: Added u_app.cedula */
                 aud.usuario_db as usuario_postgres, aud.accion, aud.tabla_afectada, 
                 aud.registro_id_afectado, aud.datos_anteriores, aud.datos_nuevos, 
                 aud.detalles_adicionales
