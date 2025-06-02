@@ -1,74 +1,100 @@
 from flask import Flask, request, jsonify, session, send_from_directory, render_template
 import psycopg2
-from psycopg2.extras import RealDictCursor
+from psycopg2.extras import RealDictCursor, Json # Para manejar JSONB
 from flask_cors import CORS
 from functools import wraps
 import json
+from werkzeug.security import generate_password_hash, check_password_hash # Para contraseñas
+import os
+import logging
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 app = Flask(__name__, static_url_path='/static', static_folder='static', template_folder='templates')
-CORS(app, supports_credentials=True)
-app.secret_key = 'M3di$al3rt_S3cr3t'
+CORS(app, supports_credentials=True, resources={r"/api/*": {"origins": "*"}}) # Ajusta origins según necesidad
+app.secret_key = os.getenv('FLASK_SECRET_KEY')
 
-# --- Conexión a la Base de Datos ---
+# --- Configuración de Conexión a la Base de Datos ---
+PG_HOST = os.getenv('PG_HOST')
+PG_DB = os.getenv('PG_DB')
+PG_USER = os.getenv('PG_USER')
+PG_PASS = os.getenv('PG_PASS')
+PG_PORT = os.getenv('PG_PORT', '5432')
+
 def get_db_connection():
     """Establece y devuelve una conexión a la base de datos PostgreSQL."""
-    conn = psycopg2.connect(
-        host="localhost",
-        database="medialert",
-        user="postgres",
-        password="0102", # Tu contraseña
-        port="5432"
-    )
-    return conn
+    try:
+        conn = psycopg2.connect(
+            host=PG_HOST,
+            database=PG_DB,
+            user=PG_USER,
+            password=PG_PASS,
+            port=PG_PORT
+        )
+        # Intentar establecer el app_user_id para la auditoría a nivel de BD
+        if 'user_id' in session:
+            with conn.cursor() as cur:
+                # Usar set_config con is_local = true para que dure solo la transacción/sesión actual
+                cur.execute("SELECT set_config('medialert.app_user_id', %s, true);", (str(session['user_id']),))
+        return conn
+    except psycopg2.Error as e:
+        app.logger.error(f"Error al conectar con la base de datos: {e}")
+        raise # Relanzar la excepción para que sea manejada más arriba si es necesario
 
 # --- Decoradores de Autorización ---
 def login_required(f):
-    """Verifica si el usuario ha iniciado sesión antes de acceder a la ruta."""
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if 'user_id' not in session:
-            return jsonify({'error': 'Se requiere autenticación'}), 401
+            return jsonify({'error': 'Autenticación requerida. Por favor, inicie sesión.'}), 401
         return f(*args, **kwargs)
     return decorated_function
 
 def admin_required(f):
-    """Verifica si el usuario tiene rol de administrador antes de acceder a la ruta."""
     @wraps(f)
     @login_required
     def decorated_function(*args, **kwargs):
         if session.get('rol') != 'admin':
-            return jsonify({'error': 'Acceso denegado. Se requiere rol de administrador'}), 403
+            return jsonify({'error': 'Acceso denegado. Se requiere rol de administrador.'}), 403
         return f(*args, **kwargs)
     return decorated_function
 
-# --- Función de Auditoría ---
-def registrar_auditoria(accion, tabla_afectada=None, registro_id=None, detalles=None):
-    """Registra una acción en la tabla de auditoría llamando a una función de PostgreSQL."""
-    admin_id = session.get('user_id')
-    if not admin_id:
-        print("Auditoría no registrada: user_id no encontrado en la sesión.")
-        return
+# --- Función de Auditoría de Aplicación ---
+def registrar_auditoria_aplicacion(accion, tabla_afectada=None, registro_id=None, 
+                                   datos_anteriores=None, datos_nuevos=None, detalles_adicionales=None):
+    """
+    Registra una acción en la tabla de auditoría llamando a la función de PostgreSQL
+    sp_registrar_evento_auditoria.
+    Los datos (anteriores, nuevos, adicionales) deben ser diccionarios de Python.
+    """
+    app_user_id = session.get('user_id') # Puede ser None si la acción no está ligada a una sesión de usuario
+
     conn = None
     cur = None
     try:
         conn = get_db_connection()
         cur = conn.cursor()
         
-        # Convierte el diccionario de detalles a una cadena JSON si existe
-        detalles_json = json.dumps(detalles) if detalles else None
+        # Convertir diccionarios de Python a objetos Json para psycopg2
+        # Esto asegura que se manejen correctamente como JSONB en PostgreSQL
+        p_datos_anteriores = Json(datos_anteriores) if datos_anteriores is not None else None
+        p_datos_nuevos = Json(datos_nuevos) if datos_nuevos is not None else None
+        p_detalles_adicionales = Json(detalles_adicionales) if detalles_adicionales is not None else None
 
         cur.execute(
-            "SELECT sp_registrar_auditoria(%s, %s, %s, %s, %s);",
-            (admin_id, accion, tabla_afectada, registro_id, detalles_json)
+            "SELECT sp_registrar_evento_auditoria(%s, %s, %s, %s, %s, %s, %s);",
+            (app_user_id, accion, tabla_afectada, registro_id, 
+             p_datos_anteriores, p_datos_nuevos, p_detalles_adicionales)
         )
-        
         conn.commit()
     except psycopg2.Error as e:
-        print(f"Error de base de datos al registrar auditoría vía SP: {e}")
+        app.logger.error(f"Error de BD al registrar auditoría de aplicación ({accion}): {e}")
         if conn:
             conn.rollback()
     except Exception as e:
-        print(f"Error general al registrar auditoría vía SP: {e}")
+        app.logger.error(f"Error general al registrar auditoría de aplicación ({accion}): {e}")
         if conn:
             conn.rollback()
     finally:
@@ -80,483 +106,673 @@ def registrar_auditoria(accion, tabla_afectada=None, registro_id=None, detalles=
 # --- Rutas de Autenticación y Sesión ---
 @app.route('/api/login', methods=['POST'])
 def login():
-    """Inicia sesión del usuario verificando sus credenciales."""
     data = request.json
     cedula = data.get('cedula')
-    contrasena = data.get('contrasena')
-    
-    conn = get_db_connection()
-    cur = conn.cursor(cursor_factory=RealDictCursor)
-    cur.execute("SELECT id, nombre, rol FROM usuarios WHERE cedula = %s AND contrasena = %s", (cedula, contrasena))
-    user = cur.fetchone()
-    cur.close()
-    conn.close()
-    
-    if user:
-        session['user_id'] = user['id']
-        session['nombre'] = user['nombre']
-        session['rol'] = user['rol']
-        registrar_auditoria('INICIO_SESION', detalles={'usuario': user['nombre']})
-        return jsonify(user)
-    
-    return jsonify({'error': 'Credenciales inválidas'}), 401
+    password_ingresada = data.get('contrasena')
+
+    if not cedula or not password_ingresada:
+        return jsonify({'error': 'Cédula y contraseña son requeridas.'}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        # Solo seleccionar usuarios activos
+        cur.execute(
+            "SELECT id, nombre, rol, contrasena as hashed_password FROM usuarios WHERE cedula = %s AND estado_usuario = 'activo'", 
+            (cedula,)
+        )
+        user = cur.fetchone()
+        
+        if user and check_password_hash(user['hashed_password'], password_ingresada):
+            session['user_id'] = user['id']
+            session['nombre'] = user['nombre']
+            session['rol'] = user['rol']
+            
+            registrar_auditoria_aplicacion(
+                'INICIO_SESION_EXITOSO', 
+                detalles_adicionales={'usuario_cedula': cedula, 'nombre_usuario': user['nombre']}
+            )
+            return jsonify({'id': user['id'], 'nombre': user['nombre'], 'rol': user['rol']})
+        else:
+            registrar_auditoria_aplicacion(
+                'INICIO_SESION_FALLIDO', 
+                detalles_adicionales={'usuario_cedula': cedula, 'motivo': 'Credenciales inválidas o usuario inactivo'}
+            )
+            return jsonify({'error': 'Credenciales inválidas o usuario inactivo.'}), 401
+    except psycopg2.Error as e:
+        app.logger.error(f"Error de BD durante el login: {e}")
+        return jsonify({'error': 'Error interno del servidor al intentar iniciar sesión.'}), 500
+    finally:
+        if conn:
+            conn.close()
 
 @app.route('/api/logout', methods=['POST'])
-@login_required
+@login_required # Asegura que solo usuarios logueados puedan hacer logout
 def logout():
-    """Cierra la sesión del usuario actual."""
     try:
-        registrar_auditoria('CIERRE_SESION', detalles={'usuario': session.get('nombre')})
-        session.clear()  # Limpia la sesión
-        return jsonify({'message': 'Cierre de sesión exitoso'}), 200
+        usuario_nombre = session.get('nombre', 'Desconocido')
+        usuario_id = session.get('user_id')
+        
+        session.clear() 
+        
+        registrar_auditoria_aplicacion(
+            'CIERRE_SESION', 
+            detalles_adicionales={'usuario_id_cerrado': usuario_id, 'nombre_usuario_cerrado': usuario_nombre}
+        )
+        return jsonify({'message': 'Cierre de sesión exitoso.'}), 200
     except Exception as e:
-        return jsonify({'error': 'Error al cerrar sesión', 'details': str(e)}), 500
+        app.logger.error(f"Error durante el logout: {e}")
+        return jsonify({'error': 'Error interno al cerrar sesión.', 'details': str(e)}), 500
 
 @app.route('/api/session_check', methods=['GET'])
 @login_required
 def session_check():
-    """Verifica si la sesión del usuario está activa y devuelve los detalles."""
+    # El decorador @login_required ya maneja si no hay sesión.
     return jsonify({
         'user_id': session.get('user_id'),
         'nombre': session.get('nombre'),
         'rol': session.get('rol')
     })
 
-# --- API: GESTIÓN DE CLIENTES ---
+# --- API: GESTIÓN DE CLIENTES (Usuarios con rol 'cliente') ---
 @app.route('/api/admin/clientes', methods=['GET', 'POST'])
 @admin_required
 def manage_clientes():
-    """Gestiona la lista de clientes (listar o crear nuevos clientes)."""
-    conn = get_db_connection()
-    cur = conn.cursor(cursor_factory=RealDictCursor)
-    
-    if request.method == 'GET':
-        cur.execute("SELECT id, nombre, cedula, email FROM usuarios WHERE rol='cliente' ORDER BY nombre")
-        clientes = cur.fetchall()
-        cur.close()
-        conn.close()
-        return jsonify(clientes)
+    conn = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        
+        admin_id_actual = session.get('user_id')
 
-    if request.method == 'POST':
-        data = request.json
-        try:
-            cur.execute(
-                "INSERT INTO usuarios (nombre, cedula, email, contrasena, rol) VALUES (%s, %s, %s, %s, 'cliente') RETURNING id",
-                (data['nombre'], data['cedula'], data['email'], data['contrasena'])
-            )
-            new_id = cur.fetchone()['id']
-            conn.commit()
-            registrar_auditoria('CREAR_CLIENTE', 'usuarios', new_id, data)
-            return jsonify({'message': 'Cliente creado', 'id': new_id}), 201
-        except Exception as e:
-            conn.rollback()
-            return jsonify({'error': str(e)}), 500
-        finally:
-            cur.close()
+        if request.method == 'GET':
+            # Por defecto, mostrar solo clientes activos
+            # Se podría añadir un parámetro ?estado=inactivo para ver los inactivos
+            estado_filtro = request.args.get('estado', 'activo')
+            if estado_filtro not in ['activo', 'inactivo', 'todos']:
+                estado_filtro = 'activo'
+
+            query = "SELECT id, nombre, cedula, email, estado_usuario FROM usuarios WHERE rol='cliente'"
+            params = []
+            if estado_filtro != 'todos':
+                query += " AND estado_usuario = %s"
+                params.append(estado_filtro)
+            query += " ORDER BY nombre"
+            
+            cur.execute(query, tuple(params))
+            clientes = cur.fetchall()
+            return jsonify(clientes)
+
+        if request.method == 'POST':
+            data = request.json
+            nombre = data.get('nombre')
+            cedula = data.get('cedula')
+            email = data.get('email')
+            contrasena_plain = data.get('contrasena')
+
+            if not all([nombre, cedula, email, contrasena_plain]):
+                return jsonify({'error': 'Nombre, cédula, email y contraseña son requeridos.'}), 400
+
+            hashed_password = generate_password_hash(contrasena_plain)
+            
+            try:
+                cur.execute(
+                    """
+                    INSERT INTO usuarios (nombre, cedula, email, contrasena, rol, estado_usuario) 
+                    VALUES (%s, %s, %s, %s, 'cliente', 'activo') RETURNING id
+                    """,
+                    (nombre, cedula, email, hashed_password)
+                )
+                new_id = cur.fetchone()['id']
+                conn.commit()
+                
+                # La auditoría de INSERT la maneja el trigger de BD.
+                # Pero podemos registrar un evento de aplicación más específico.
+                registrar_auditoria_aplicacion(
+                    'CREACION_CLIENTE', 
+                    tabla_afectada='usuarios', 
+                    registro_id=str(new_id),
+                    datos_nuevos={'nombre': nombre, 'cedula': cedula, 'email': email, 'rol': 'cliente', 'estado_usuario': 'activo'},
+                    detalles_adicionales={'creado_por_admin_id': admin_id_actual}
+                )
+                return jsonify({'message': 'Cliente creado con éxito.', 'id': new_id}), 201
+            except psycopg2.IntegrityError as e: # Ej. cédula o email duplicado
+                conn.rollback()
+                if "usuarios_cedula_key" in str(e):
+                    return jsonify({'error': f'La cédula "{cedula}" ya está registrada.'}), 409
+                if "usuarios_email_key" in str(e):
+                    return jsonify({'error': f'El email "{email}" ya está registrado.'}), 409
+                app.logger.error(f"Error de integridad al crear cliente: {e}")
+                return jsonify({'error': 'Error de integridad de datos al crear cliente.'}), 409
+            except psycopg2.Error as e:
+                conn.rollback()
+                app.logger.error(f"Error de BD al crear cliente: {e}")
+                return jsonify({'error': 'Error de base de datos al crear cliente.'}), 500
+    except psycopg2.Error as e:
+        app.logger.error(f"Error de conexión/BD en manage_clientes: {e}")
+        return jsonify({'error': 'Error interno del servidor.'}), 500
+    finally:
+        if conn:
             conn.close()
 
-@app.route('/api/admin/clientes/<int:uid>', methods=['GET', 'PUT', 'DELETE'])
+@app.route('/api/admin/clientes/<int:uid>', methods=['GET', 'PUT']) # DELETE se maneja con cambio de estado
 @admin_required
 def manage_single_cliente(uid):
-    """Gestiona un cliente específico (obtener, actualizar o eliminar)."""
-    conn = get_db_connection()
-    cur = conn.cursor(cursor_factory=RealDictCursor)
+    conn = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        admin_id_actual = session.get('user_id')
 
-    if request.method == 'GET':
-        cur.execute("SELECT id, nombre, cedula, email FROM usuarios WHERE id = %s AND rol='cliente'", (uid,))
-        cliente = cur.fetchone()
-        cur.close()
-        conn.close()
-        return jsonify(cliente)
-        
-    if request.method == 'PUT':
-        data = request.json
-        try:
-            cur.execute(
-                "UPDATE usuarios SET nombre=%s, cedula=%s, email=%s WHERE id=%s AND rol='cliente'",
-                (data['nombre'], data['cedula'], data['email'], uid)
-            )
-            conn.commit()
-            registrar_auditoria('EDITAR_CLIENTE', 'usuarios', uid, data)
-            return jsonify({'message': 'Cliente actualizado'})
-        except Exception as e:
-            conn.rollback()
-            return jsonify({'error': str(e)}), 500
-        finally:
-            cur.close()
-            conn.close()
+        if request.method == 'GET':
+            cur.execute("SELECT id, nombre, cedula, email, estado_usuario FROM usuarios WHERE id = %s AND rol='cliente'", (uid,))
+            cliente = cur.fetchone()
+            if not cliente:
+                return jsonify({'error': 'Cliente no encontrado.'}), 404
+            return jsonify(cliente)
+            
+        if request.method == 'PUT': # Para editar datos o para "eliminar" (cambiar estado)
+            data = request.json
+            
+            # Obtener datos actuales para auditoría
+            cur.execute("SELECT * FROM usuarios WHERE id = %s AND rol='cliente'", (uid,))
+            old_cliente_data = cur.fetchone()
+            if not old_cliente_data:
+                return jsonify({'error': 'Cliente no encontrado para actualizar.'}), 404
 
-    if request.method == 'DELETE':
-        try:
-            cur.execute("DELETE FROM usuarios WHERE id=%s AND rol='cliente'", (uid,))
-            conn.commit()
-            registrar_auditoria('ELIMINAR_CLIENTE', 'usuarios', uid)
-            return jsonify({'message': 'Cliente eliminado'})
-        except Exception as e:
-            conn.rollback()
-            return jsonify({'error': str(e)}), 500
-        finally:
-            cur.close()
+            nombre = data.get('nombre', old_cliente_data['nombre'])
+            cedula = data.get('cedula', old_cliente_data['cedula'])
+            email = data.get('email', old_cliente_data['email'])
+            estado_usuario = data.get('estado_usuario', old_cliente_data['estado_usuario']) # Para soft delete
+
+            if estado_usuario not in ['activo', 'inactivo']:
+                return jsonify({'error': 'Valor de estado_usuario no válido.'}), 400
+            
+            # Si se provee una nueva contraseña, hashearla. Si no, no se actualiza.
+            new_password_plain = data.get('contrasena_nueva')
+            sql_update = "UPDATE usuarios SET nombre=%s, cedula=%s, email=%s, estado_usuario=%s"
+            params = [nombre, cedula, email, estado_usuario]
+            
+            if new_password_plain:
+                hashed_new_password = generate_password_hash(new_password_plain)
+                sql_update += ", contrasena=%s"
+                params.append(hashed_new_password)
+            
+            sql_update += " WHERE id=%s AND rol='cliente'"
+            params.append(uid)
+
+            try:
+                cur.execute(sql_update, tuple(params))
+                conn.commit()
+                
+                # Auditoría de aplicación. El trigger de BD también registrará el UPDATE.
+                accion_audit = 'EDICION_CLIENTE'
+                if old_cliente_data['estado_usuario'] == 'activo' and estado_usuario == 'inactivo':
+                    accion_audit = 'DESACTIVACION_CLIENTE'
+                elif old_cliente_data['estado_usuario'] == 'inactivo' and estado_usuario == 'activo':
+                     accion_audit = 'REACTIVACION_CLIENTE'
+
+                registrar_auditoria_aplicacion(
+                    accion_audit, 
+                    tabla_afectada='usuarios', 
+                    registro_id=str(uid),
+                    datos_anteriores=dict(old_cliente_data), # Convertir RealDictRow a dict
+                    datos_nuevos={'nombre': nombre, 'cedula': cedula, 'email': email, 'estado_usuario': estado_usuario},
+                    detalles_adicionales={'actualizado_por_admin_id': admin_id_actual}
+                )
+                return jsonify({'message': f'Cliente {uid} actualizado con éxito.'})
+            except psycopg2.IntegrityError as e:
+                conn.rollback()
+                # Manejar errores de unicidad para cédula y email
+                return jsonify({'error': f'Error de integridad al actualizar: {e}'}), 409
+            except psycopg2.Error as e:
+                conn.rollback()
+                app.logger.error(f"Error de BD al actualizar cliente {uid}: {e}")
+                return jsonify({'error': f'Error de base de datos al actualizar cliente {uid}.'}), 500
+    except psycopg2.Error as e:
+        app.logger.error(f"Error de conexión/BD en manage_single_cliente {uid}: {e}")
+        return jsonify({'error': 'Error interno del servidor.'}), 500
+    finally:
+        if conn:
             conn.close()
 
 # --- API: GESTIÓN DE MEDICAMENTOS ---
 @app.route('/api/admin/medicamentos', methods=['GET', 'POST'])
 @admin_required
 def manage_medicamentos():
-    """Gestiona la lista de medicamentos (listar o crear nuevos medicamentos)."""
-    conn = get_db_connection()
-    cur = conn.cursor(cursor_factory=RealDictCursor)
-    
-    if request.method == 'GET':
-        cur.execute("SELECT * FROM medicamentos ORDER BY nombre")
-        medicamentos = cur.fetchall()
-        cur.close()
-        conn.close()
-        return jsonify(medicamentos)
-    
-    if request.method == 'POST':
-        data = request.json
-        try:
-            cur.execute(
-                "INSERT INTO medicamentos (nombre, descripcion) VALUES (%s, %s) RETURNING id",
-                (data['nombre'], data['descripcion'])
-            )
-            new_id = cur.fetchone()['id']
-            conn.commit()
-            registrar_auditoria('CREAR_MEDICAMENTO', 'medicamentos', new_id, data)
-            return jsonify({'message': 'Medicamento creado', 'id': new_id}), 201
-        except Exception as e:
-            conn.rollback()
-            return jsonify({'error': str(e)}), 500
-        finally:
-            cur.close()
+    conn = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        admin_id_actual = session.get('user_id')
+
+        if request.method == 'GET':
+            estado_filtro = request.args.get('estado', 'disponible')
+            if estado_filtro not in ['disponible', 'discontinuado', 'todos']:
+                estado_filtro = 'disponible'
+            
+            query = "SELECT id, nombre, descripcion, composicion, sintomas_secundarios, indicaciones, rango_edad, estado_medicamento FROM medicamentos"
+            params = []
+            if estado_filtro != 'todos':
+                query += " WHERE estado_medicamento = %s"
+                params.append(estado_filtro)
+            query += " ORDER BY nombre"
+
+            cur.execute(query, tuple(params))
+            medicamentos = cur.fetchall()
+            return jsonify(medicamentos)
+        
+        if request.method == 'POST':
+            data = request.json
+            # Extraer todos los campos
+            nombre = data.get('nombre')
+            descripcion = data.get('descripcion')
+            composicion = data.get('composicion')
+            sintomas_secundarios = data.get('sintomas_secundarios')
+            indicaciones = data.get('indicaciones')
+            rango_edad = data.get('rango_edad')
+            # estado_medicamento por defecto es 'disponible' en la BD
+
+            if not nombre: # Nombre es el campo más crítico
+                return jsonify({'error': 'El nombre del medicamento es requerido.'}), 400
+            
+            try:
+                cur.execute(
+                    """
+                    INSERT INTO medicamentos (nombre, descripcion, composicion, sintomas_secundarios, indicaciones, rango_edad, estado_medicamento) 
+                    VALUES (%s, %s, %s, %s, %s, %s, 'disponible') RETURNING id
+                    """,
+                    (nombre, descripcion, composicion, sintomas_secundarios, indicaciones, rango_edad)
+                )
+                new_id = cur.fetchone()['id']
+                conn.commit()
+                registrar_auditoria_aplicacion(
+                    'CREACION_MEDICAMENTO', 
+                    tabla_afectada='medicamentos', 
+                    registro_id=str(new_id),
+                    datos_nuevos=data, # Enviar todos los datos recibidos
+                    detalles_adicionales={'creado_por_admin_id': admin_id_actual}
+                )
+                return jsonify({'message': 'Medicamento creado con éxito.', 'id': new_id}), 201
+            except psycopg2.IntegrityError as e: # Nombre duplicado
+                conn.rollback()
+                return jsonify({'error': f'El medicamento "{nombre}" ya existe.'}), 409
+            except psycopg2.Error as e:
+                conn.rollback()
+                app.logger.error(f"Error de BD al crear medicamento: {e}")
+                return jsonify({'error': 'Error de base de datos al crear medicamento.'}), 500
+    except psycopg2.Error as e:
+        app.logger.error(f"Error de conexión/BD en manage_medicamentos: {e}")
+        return jsonify({'error': 'Error interno del servidor.'}), 500
+    finally:
+        if conn:
             conn.close()
 
-@app.route('/api/admin/medicamentos/<int:mid>', methods=['PUT', 'DELETE'])
+@app.route('/api/admin/medicamentos/<int:mid>', methods=['GET','PUT']) # DELETE se maneja con cambio de estado
 @admin_required
 def manage_single_medicamento(mid):
-    """Gestiona un medicamento específico (actualizar o eliminar)."""
-    conn = get_db_connection()
-    cur = conn.cursor()
-    
-    if request.method == 'PUT':
-        data = request.json
-        try:
-            cur.execute(
-                "UPDATE medicamentos SET nombre=%s, descripcion=%s WHERE id=%s",
-                (data['nombre'], data['descripcion'], mid)
-            )
-            conn.commit()
-            registrar_auditoria('EDITAR_MEDICAMENTO', 'medicamentos', mid, data)
-            return jsonify({'message': 'Medicamento actualizado'})
-        except Exception as e:
-            conn.rollback()
-            return jsonify({'error': str(e)}), 500
-        finally:
-            cur.close()
-            conn.close()
+    conn = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        admin_id_actual = session.get('user_id')
 
-    if request.method == 'DELETE':
-        try:
-            # Primero, elimina las alertas asociadas para evitar errores de clave foránea
-            cur.execute("DELETE FROM alertas WHERE medicamento_id=%s", (mid,))
-            cur.execute("DELETE FROM medicamentos WHERE id=%s", (mid,))
-            conn.commit()
-            registrar_auditoria('ELIMINAR_MEDICAMENTO', 'medicamentos', mid)
-            return jsonify({'message': 'Medicamento y sus alertas asociadas eliminados'})
-        except Exception as e:
-            conn.rollback()
-            return jsonify({'error': str(e)}), 500
-        finally:
-            cur.close()
+        if request.method == 'GET':
+            cur.execute("SELECT * FROM medicamentos WHERE id = %s", (mid,))
+            medicamento = cur.fetchone()
+            if not medicamento:
+                return jsonify({'error': 'Medicamento no encontrado.'}), 404
+            return jsonify(medicamento)
+
+        if request.method == 'PUT':
+            data = request.json
+            
+            cur.execute("SELECT * FROM medicamentos WHERE id = %s", (mid,))
+            old_med_data = cur.fetchone()
+            if not old_med_data:
+                return jsonify({'error': 'Medicamento no encontrado para actualizar.'}), 404
+
+            # Actualizar todos los campos si se proveen
+            nombre = data.get('nombre', old_med_data['nombre'])
+            descripcion = data.get('descripcion', old_med_data['descripcion'])
+            composicion = data.get('composicion', old_med_data['composicion'])
+            sintomas_secundarios = data.get('sintomas_secundarios', old_med_data['sintomas_secundarios'])
+            indicaciones = data.get('indicaciones', old_med_data['indicaciones'])
+            rango_edad = data.get('rango_edad', old_med_data['rango_edad'])
+            estado_medicamento = data.get('estado_medicamento', old_med_data['estado_medicamento'])
+
+            if estado_medicamento not in ['disponible', 'discontinuado']:
+                 return jsonify({'error': 'Valor de estado_medicamento no válido.'}), 400
+            
+            try:
+                cur.execute(
+                    """
+                    UPDATE medicamentos SET nombre=%s, descripcion=%s, composicion=%s, 
+                    sintomas_secundarios=%s, indicaciones=%s, rango_edad=%s, estado_medicamento=%s 
+                    WHERE id=%s
+                    """,
+                    (nombre, descripcion, composicion, sintomas_secundarios, indicaciones, rango_edad, estado_medicamento, mid)
+                )
+                conn.commit()
+                
+                accion_audit = 'EDICION_MEDICAMENTO'
+                if old_med_data['estado_medicamento'] == 'disponible' and estado_medicamento == 'discontinuado':
+                    accion_audit = 'DISCONTINUACION_MEDICAMENTO'
+                elif old_med_data['estado_medicamento'] == 'discontinuado' and estado_medicamento == 'disponible':
+                    accion_audit = 'REACTIVACION_MEDICAMENTO'
+                
+                registrar_auditoria_aplicacion(
+                    accion_audit, 
+                    tabla_afectada='medicamentos', 
+                    registro_id=str(mid),
+                    datos_anteriores=dict(old_med_data),
+                    datos_nuevos=data, # Enviar todos los datos recibidos para la actualización
+                    detalles_adicionales={'actualizado_por_admin_id': admin_id_actual}
+                )
+                return jsonify({'message': f'Medicamento {mid} actualizado con éxito.'})
+            except psycopg2.IntegrityError as e: # Nombre duplicado
+                conn.rollback()
+                return jsonify({'error': f'El nombre de medicamento "{nombre}" ya existe para otro ID.'}), 409
+            except psycopg2.Error as e:
+                conn.rollback()
+                app.logger.error(f"Error de BD al actualizar medicamento {mid}: {e}")
+                return jsonify({'error': f'Error de base de datos al actualizar medicamento {mid}.'}), 500
+    except psycopg2.Error as e:
+        app.logger.error(f"Error de conexión/BD en manage_single_medicamento {mid}: {e}")
+        return jsonify({'error': 'Error interno del servidor.'}), 500
+    finally:
+        if conn:
             conn.close()
 
 # --- API: GESTIÓN DE ALERTAS ---
-@app.route('/api/admin/alertas', methods=['GET'])
+@app.route('/api/admin/alertas', methods=['GET', 'POST'])
 @admin_required
-def get_alertas_admin():
-    """Lista todas las alertas existentes para los administradores."""
-    conn = get_db_connection()
-    cur = conn.cursor(cursor_factory=RealDictCursor)
-    cur.execute("""
-        SELECT a.id, u.nombre as cliente_nombre, m.nombre as medicamento_nombre, 
-               a.dosis, a.frecuencia, a.estado, a.fecha_inicio, a.fecha_fin
-        FROM alertas a
-        JOIN usuarios u ON a.usuario_id = u.id
-        JOIN medicamentos m ON a.medicamento_id = m.id
-        ORDER BY u.nombre, m.nombre
-    """)
-    alertas = cur.fetchall()
-    cur.close()
-    conn.close()
-    return jsonify(alertas)
-
-@app.route('/api/admin/alertas', methods=['POST'])
-@admin_required
-def create_alerta_admin():
-    """Crea una nueva alerta para un cliente y un medicamento específico."""
-    data = request.json
-    conn = None # Asegurar que conn esté definida para el bloque finally
+def manage_alertas_admin():
+    conn = None
     try:
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
-        
-        required_fields = ['usuario_id', 'medicamento_id', 'fecha_inicio']
-        for field in required_fields:
-            if field not in data or not data[field]:
-                return jsonify({'error': f'El campo {field} es obligatorio.'}), 400
+        admin_id_actual = session.get('user_id')
 
-        fecha_fin = data.get('fecha_fin') if data.get('fecha_fin') else None # Puede ser None
-        dosis = data.get('dosis', '') # Default a string vacío si no se provee
-        frecuencia = data.get('frecuencia', '') # Default a string vacío
+        if request.method == 'GET':
+            # Mostrar todas las alertas, indicando estado de usuario y medicamento
+            cur.execute("""
+                SELECT 
+                    a.id, a.usuario_id, u.nombre as cliente_nombre, u.estado_usuario,
+                    a.medicamento_id, m.nombre as medicamento_nombre, m.estado_medicamento,
+                    a.dosis, a.frecuencia, a.fecha_inicio, a.fecha_fin, a.hora_preferida, a.estado as estado_alerta
+                FROM alertas a
+                JOIN usuarios u ON a.usuario_id = u.id
+                JOIN medicamentos m ON a.medicamento_id = m.id
+                ORDER BY u.nombre, m.nombre, a.fecha_inicio
+            """)
+            alertas = cur.fetchall()
+            return jsonify(alertas)
 
-        cur.execute(
-            """
-            INSERT INTO alertas (usuario_id, medicamento_id, dosis, frecuencia, fecha_inicio, fecha_fin, estado)
-            VALUES (%s, %s, %s, %s, %s, %s, 'activa') RETURNING id
-            """,
-            (data['usuario_id'], data['medicamento_id'], dosis, frecuencia, data['fecha_inicio'], fecha_fin)
-        )
-        new_id = cur.fetchone()['id']
-        
-        # Para la auditoría, obtener nombres para mejor legibilidad
-        cur.execute("SELECT nombre FROM usuarios WHERE id = %s", (data['usuario_id'],))
-        cliente_nombre_res = cur.fetchone()
-        cliente_nombre = cliente_nombre_res['nombre'] if cliente_nombre_res else 'Desconocido'
+        if request.method == 'POST':
+            data = request.json
+            usuario_id = data.get('usuario_id')
+            medicamento_id = data.get('medicamento_id')
+            fecha_inicio = data.get('fecha_inicio')
 
-        cur.execute("SELECT nombre FROM medicamentos WHERE id = %s", (data['medicamento_id'],))
-        medicamento_nombre_res = cur.fetchone()
-        medicamento_nombre = medicamento_nombre_res['nombre'] if medicamento_nombre_res else 'Desconocido'
-        
-        conn.commit() # Commit después de todas las lecturas para la auditoría
+            if not all([usuario_id, medicamento_id, fecha_inicio]):
+                return jsonify({'error': 'ID de usuario, ID de medicamento y fecha de inicio son requeridos.'}), 400
 
-        audit_details = {
-            'alerta_id': new_id,
-            'cliente': f"{cliente_nombre} (ID: {data['usuario_id']})",
-            'medicamento': f"{medicamento_nombre} (ID: {data['medicamento_id']})",
-            'dosis': dosis,
-            'frecuencia': frecuencia,
-            'fecha_inicio': data['fecha_inicio'],
-            'fecha_fin': fecha_fin if fecha_fin else "N/A"
-        }
-        registrar_auditoria('CREAR_ALERTA', 'alertas', new_id, audit_details)
-        
-        return jsonify({'message': 'Alerta creada con éxito.', 'id': new_id}), 201
-
-    except psycopg2.Error as db_err:
-        if conn:
-            conn.rollback()
-        pgcode = getattr(db_err, 'pgcode', '')
-        if pgcode == '23503': # foreign_key_violation
-            if 'alertas_usuario_id_fkey' in str(db_err):
-                 return jsonify({'error': 'El ID de cliente proporcionado no existe.'}), 400
-            if 'alertas_medicamento_id_fkey' in str(db_err):
-                 return jsonify({'error': 'El ID de medicamento proporcionado no existe.'}), 400
-        print(f"Error de base de datos al crear alerta: {db_err}")
-        return jsonify({'error': f'Error de base de datos al crear la alerta.'}), 500
-    except Exception as e:
-        if conn:
-            conn.rollback()
-        print(f"Error general al crear alerta: {e}")
-        return jsonify({'error': 'Ocurrió un error inesperado al crear la alerta.'}), 500
-    finally:
-        if 'cur' in locals() and cur is not None: # Verificar si cur fue inicializado
-            cur.close()
-        if conn is not None:
-            conn.close()
+            # Verificar que el usuario sea cliente y esté activo
+            cur.execute("SELECT estado_usuario FROM usuarios WHERE id = %s AND rol = 'cliente'", (usuario_id,))
+            user_check = cur.fetchone()
+            if not user_check or user_check['estado_usuario'] != 'activo':
+                return jsonify({'error': 'El usuario seleccionado no es un cliente activo.'}), 400
             
-@app.route('/api/admin/alertas/<int:alerta_id>', methods=['GET'])
-@admin_required
-def get_single_alerta_admin(alerta_id):
-    """Obtiene los detalles de una alerta específica."""
-    conn = None
-    cur = None
-    try:
-        conn = get_db_connection()
-        cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute("SELECT id, usuario_id, medicamento_id, dosis, frecuencia, fecha_inicio, fecha_fin, estado FROM alertas WHERE id = %s", (alerta_id,))
-        alerta = cur.fetchone()
-        if alerta:
-            return jsonify(alerta)
-        return jsonify({'error': 'Alerta no encontrada'}), 404
-    except Exception as e:
-        print(f"Error al obtener alerta individual: {e}")
-        return jsonify({'error': 'Error interno al obtener la alerta'}), 500
+            # Verificar que el medicamento esté disponible
+            cur.execute("SELECT estado_medicamento FROM medicamentos WHERE id = %s", (medicamento_id,))
+            med_check = cur.fetchone()
+            if not med_check or med_check['estado_medicamento'] != 'disponible':
+                return jsonify({'error': 'El medicamento seleccionado no está disponible.'}), 400
+
+            dosis = data.get('dosis')
+            frecuencia = data.get('frecuencia')
+            fecha_fin = data.get('fecha_fin') if data.get('fecha_fin') else None
+            hora_preferida = data.get('hora_preferida') if data.get('hora_preferida') else None
+            estado_alerta = data.get('estado', 'activa') # Por defecto 'activa'
+
+            if estado_alerta not in ['activa', 'inactiva', 'completada', 'fallida']:
+                return jsonify({'error': 'Valor de estado de alerta no válido.'}), 400
+
+            try:
+                cur.execute(
+                    """
+                    INSERT INTO alertas (usuario_id, medicamento_id, dosis, frecuencia, fecha_inicio, fecha_fin, hora_preferida, estado)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING id
+                    """,
+                    (usuario_id, medicamento_id, dosis, frecuencia, fecha_inicio, fecha_fin, hora_preferida, estado_alerta)
+                )
+                new_id = cur.fetchone()['id']
+                conn.commit()
+                registrar_auditoria_aplicacion(
+                    'CREACION_ALERTA', 
+                    tabla_afectada='alertas', 
+                    registro_id=str(new_id),
+                    datos_nuevos=data,
+                    detalles_adicionales={'creado_por_admin_id': admin_id_actual}
+                )
+                return jsonify({'message': 'Alerta creada con éxito.', 'id': new_id}), 201
+            except psycopg2.Error as e:
+                conn.rollback()
+                app.logger.error(f"Error de BD al crear alerta: {e}")
+                return jsonify({'error': 'Error de base de datos al crear alerta.'}), 500
+    except psycopg2.Error as e:
+        app.logger.error(f"Error de conexión/BD en manage_alertas_admin: {e}")
+        return jsonify({'error': 'Error interno del servidor.'}), 500
     finally:
-        if cur:
-            cur.close()
         if conn:
             conn.close()
 
-@app.route('/api/admin/alertas/<int:alerta_id>', methods=['PUT'])
+@app.route('/api/admin/alertas/<int:alerta_id>', methods=['GET', 'PUT', 'DELETE'])
 @admin_required
-def update_alerta_admin(alerta_id):
-    """Actualiza los detalles de una alerta específica."""
-    data = request.json
+def manage_single_alerta_admin(alerta_id):
     conn = None
-    cur = None
     try:
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
+        admin_id_actual = session.get('user_id')
 
-        required_fields = ['usuario_id', 'medicamento_id', 'fecha_inicio', 'estado']
-        for field in required_fields:
-            if field not in data or data[field] is None: # Permite string vacío pero no None para campos que podrían ser opcionales si no fueran 'required'
-                return jsonify({'error': f'El campo {field} es obligatorio.'}), 400
-        
-        if not data['estado'] in ['activa', 'inactiva', 'completada']:
-             return jsonify({'error': 'Valor de estado no válido.'}), 400
+        if request.method == 'GET':
+            cur.execute("SELECT * FROM alertas WHERE id = %s", (alerta_id,))
+            alerta = cur.fetchone()
+            if not alerta:
+                return jsonify({'error': 'Alerta no encontrada.'}), 404
+            return jsonify(alerta)
 
-        fecha_fin = data.get('fecha_fin') if data.get('fecha_fin') else None
-        dosis = data.get('dosis', '')
-        frecuencia = data.get('frecuencia', '')
-        
-        cur.execute(
-            """
-            UPDATE alertas 
-            SET usuario_id = %s, medicamento_id = %s, dosis = %s, frecuencia = %s, 
-                fecha_inicio = %s, fecha_fin = %s, estado = %s
-            WHERE id = %s
-            """,
-            (data['usuario_id'], data['medicamento_id'], dosis, frecuencia, 
-             data['fecha_inicio'], fecha_fin, data['estado'], alerta_id)
-        )
-        
-        if cur.rowcount == 0:
-            conn.rollback() # Si no se actualizó ninguna fila, podría no existir
-            return jsonify({'error': 'Alerta no encontrada para actualizar.'}), 404
+        if request.method == 'PUT':
+            data = request.json
+            cur.execute("SELECT * FROM alertas WHERE id = %s", (alerta_id,))
+            old_alerta_data = cur.fetchone()
+            if not old_alerta_data:
+                return jsonify({'error': 'Alerta no encontrada para actualizar.'}), 404
 
-        # Para la auditoría
-        cur.execute("SELECT nombre FROM usuarios WHERE id = %s", (data['usuario_id'],))
-        cliente_nombre_res = cur.fetchone()
-        cliente_nombre = cliente_nombre_res['nombre'] if cliente_nombre_res else 'Desconocido'
+            # Validar campos como en la creación
+            usuario_id = data.get('usuario_id', old_alerta_data['usuario_id'])
+            medicamento_id = data.get('medicamento_id', old_alerta_data['medicamento_id'])
+            
+            # Verificar usuario y medicamento si cambian o si se actualiza una alerta inactiva
+            # (Podría ser más complejo si se permite cambiar usuario/medicamento de una alerta)
+            # Por simplicidad, asumimos que usuario_id y medicamento_id no cambian frecuentemente en un PUT,
+            # o que si cambian, la validación de activo/disponible es importante.
 
-        cur.execute("SELECT nombre FROM medicamentos WHERE id = %s", (data['medicamento_id'],))
-        medicamento_nombre_res = cur.fetchone()
-        medicamento_nombre = medicamento_nombre_res['nombre'] if medicamento_nombre_res else 'Desconocido'
-        
-        conn.commit()
+            dosis = data.get('dosis', old_alerta_data['dosis'])
+            frecuencia = data.get('frecuencia', old_alerta_data['frecuencia'])
+            fecha_inicio = data.get('fecha_inicio', old_alerta_data['fecha_inicio'])
+            fecha_fin = data.get('fecha_fin', old_alerta_data['fecha_fin'])
+            if fecha_fin == '': fecha_fin = None # Tratar string vacío como NULL
+            hora_preferida = data.get('hora_preferida', old_alerta_data['hora_preferida'])
+            if hora_preferida == '': hora_preferida = None
+            estado = data.get('estado', old_alerta_data['estado'])
 
-        audit_details = {
-            'alerta_id': alerta_id,
-            'modificaciones': {
-                'cliente': f"{cliente_nombre} (ID: {data['usuario_id']})",
-                'medicamento': f"{medicamento_nombre} (ID: {data['medicamento_id']})",
-                'dosis': dosis,
-                'frecuencia': frecuencia,
-                'fecha_inicio': data['fecha_inicio'],
-                'fecha_fin': fecha_fin if fecha_fin else "N/A",
-                'estado': data['estado']
-            }
-        }
-        registrar_auditoria('EDITAR_ALERTA', 'alertas', alerta_id, audit_details)
-        
-        return jsonify({'message': 'Alerta actualizada con éxito.'}), 200
+            if estado not in ['activa', 'inactiva', 'completada', 'fallida']:
+                return jsonify({'error': 'Valor de estado de alerta no válido.'}), 400
+            
+            try:
+                cur.execute(
+                    """
+                    UPDATE alertas SET usuario_id=%s, medicamento_id=%s, dosis=%s, frecuencia=%s, 
+                    fecha_inicio=%s, fecha_fin=%s, hora_preferida=%s, estado=%s 
+                    WHERE id=%s
+                    """,
+                    (usuario_id, medicamento_id, dosis, frecuencia, fecha_inicio, fecha_fin, hora_preferida, estado, alerta_id)
+                )
+                conn.commit()
+                registrar_auditoria_aplicacion(
+                    'EDICION_ALERTA', 
+                    tabla_afectada='alertas', 
+                    registro_id=str(alerta_id),
+                    datos_anteriores=dict(old_alerta_data),
+                    datos_nuevos=data,
+                    detalles_adicionales={'actualizado_por_admin_id': admin_id_actual}
+                )
+                return jsonify({'message': f'Alerta {alerta_id} actualizada con éxito.'})
+            except psycopg2.Error as e:
+                conn.rollback()
+                app.logger.error(f"Error de BD al actualizar alerta {alerta_id}: {e}")
+                return jsonify({'error': f'Error de base de datos al actualizar alerta {alerta_id}.'}), 500
 
-    except psycopg2.Error as db_err:
-        if conn: conn.rollback()
-        pgcode = getattr(db_err, 'pgcode', '')
-        if pgcode == '23503': # foreign_key_violation
-            return jsonify({'error': 'ID de cliente o medicamento no válido al actualizar.'}), 400
-        print(f"Error de BD al actualizar alerta: {db_err}")
-        return jsonify({'error': 'Error de base de datos al actualizar la alerta.'}), 500
-    except Exception as e:
-        if conn: conn.rollback()
-        print(f"Error general al actualizar alerta: {e}")
-        return jsonify({'error': 'Error inesperado al actualizar la alerta.'}), 500
+        if request.method == 'DELETE': # Borrado físico de alertas permitido
+            cur.execute("SELECT * FROM alertas WHERE id = %s", (alerta_id,))
+            old_alerta_data = cur.fetchone()
+            if not old_alerta_data:
+                return jsonify({'error': 'Alerta no encontrada para eliminar.'}), 404
+            try:
+                cur.execute("DELETE FROM alertas WHERE id = %s", (alerta_id,))
+                conn.commit()
+                registrar_auditoria_aplicacion(
+                    'ELIMINACION_ALERTA', 
+                    tabla_afectada='alertas', 
+                    registro_id=str(alerta_id),
+                    datos_anteriores=dict(old_alerta_data),
+                    detalles_adicionales={'eliminado_por_admin_id': admin_id_actual}
+                )
+                return jsonify({'message': f'Alerta {alerta_id} eliminada con éxito.'})
+            except psycopg2.Error as e:
+                conn.rollback()
+                app.logger.error(f"Error de BD al eliminar alerta {alerta_id}: {e}")
+                return jsonify({'error': f'Error de base de datos al eliminar alerta {alerta_id}.'}), 500
+    except psycopg2.Error as e:
+        app.logger.error(f"Error de conexión/BD en manage_single_alerta_admin {alerta_id}: {e}")
+        return jsonify({'error': 'Error interno del servidor.'}), 500
     finally:
-        if cur: cur.close()
-        if conn: conn.close()
+        if conn:
+            conn.close()
 
-@app.route('/api/admin/alertas/<int:alerta_id>', methods=['DELETE'])
-@admin_required
-def delete_alerta_admin(alerta_id):
-    # Elimina una alerta específica
+
+# --- API: VISTA DEL CLIENTE ---
+@app.route('/api/cliente/mis_alertas', methods=['GET'])
+@login_required # Solo usuarios logueados
+def get_mis_alertas_cliente():
+    if session.get('rol') != 'cliente':
+        return jsonify({'error': 'Acceso denegado. Esta vista es solo para clientes.'}), 403
+    
+    cliente_id = session['user_id']
     conn = None
-    cur = None
     try:
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
-
-        # Opcional: Obtener detalles para auditoría antes de borrar
+        # Mostrar solo alertas activas para el cliente, de medicamentos disponibles
+        # y donde el propio cliente esté activo (aunque el login ya lo filtraría)
         cur.execute("""
-            SELECT u.nombre as cliente_nombre, m.nombre as medicamento_nombre, a.dosis 
+            SELECT 
+                a.id, m.nombre as medicamento_nombre, a.dosis, a.frecuencia, 
+                a.fecha_inicio, a.fecha_fin, a.hora_preferida, a.estado
             FROM alertas a
-            LEFT JOIN usuarios u ON a.usuario_id = u.id
-            LEFT JOIN medicamentos m ON a.medicamento_id = m.id
-            WHERE a.id = %s
-        """, (alerta_id,))
-        audit_data = cur.fetchone()
-
-        cur.execute("DELETE FROM alertas WHERE id = %s", (alerta_id,))
-        
-        if cur.rowcount == 0:
-            conn.rollback()
-            return jsonify({'error': 'Alerta no encontrada para eliminar.'}), 404
-        
-        conn.commit()
-
-        audit_details = {'alerta_id_eliminada': alerta_id}
-        if audit_data:
-            audit_details.update({
-                'cliente_anterior': audit_data.get('cliente_nombre', 'N/A'),
-                'medicamento_anterior': audit_data.get('medicamento_nombre', 'N/A'),
-                'dosis_anterior': audit_data.get('dosis', 'N/A')
-            })
-        registrar_auditoria('ELIMINAR_ALERTA', 'alertas', alerta_id, audit_details)
-        
-        return jsonify({'message': 'Alerta eliminada con éxito.'}), 200
-    except Exception as e:
-        if conn: conn.rollback()
-        print(f"Error al eliminar alerta: {e}")
-        return jsonify({'error': 'Error inesperado al eliminar la alerta.'}), 500
+            JOIN medicamentos m ON a.medicamento_id = m.id
+            JOIN usuarios u ON a.usuario_id = u.id
+            WHERE a.usuario_id = %s 
+              AND a.estado = 'activa'
+              AND m.estado_medicamento = 'disponible'
+              AND u.estado_usuario = 'activo'
+            ORDER BY a.fecha_inicio, a.hora_preferida
+        """, (cliente_id,))
+        alertas = cur.fetchall()
+        return jsonify(alertas)
+    except psycopg2.Error as e:
+        app.logger.error(f"Error de BD al obtener mis_alertas para cliente {cliente_id}: {e}")
+        return jsonify({'error': 'Error al cargar tus alertas.'}), 500
     finally:
-        if cur: cur.close()
-        if conn: conn.close()
+        if conn:
+            conn.close()
 
 
-# --- API: AUDITORÍA ---
+# --- API: AUDITORÍA (Solo Admin) ---
 @app.route('/api/admin/auditoria', methods=['GET'])
 @admin_required
-def get_auditoria():
-    # Devuelve el registro de auditoría para los administradores.
-    conn = get_db_connection()
-    cur = conn.cursor(cursor_factory=RealDictCursor)
-    cur.execute("""
-        SELECT a.id, u.nombre as admin_nombre, a.accion, a.tabla_afectada, a.registro_id, a.detalles, a.fecha_hora
-        FROM auditoria a
-        JOIN usuarios u ON a.usuario_id = u.id
-        ORDER BY a.fecha_hora DESC
-    """)
-    logs = cur.fetchall()
-    cur.close()
-    conn.close()
-    return jsonify(logs)
-
+def get_auditoria_logs():
+    conn = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        # La columna usuario_id_app en la tabla auditoria se llena desde sp_registrar_evento_auditoria
+        # y también por los triggers si medialert.app_user_id está seteado.
+        # Aquí unimos con usuarios para obtener el nombre del admin que está en la sesión de la app, si es posible.
+        cur.execute("""
+            SELECT 
+                aud.id, 
+                aud.fecha_hora,
+                u_app.nombre as nombre_usuario_app, -- Nombre del usuario de la app que realizó la acción
+                aud.usuario_db as usuario_postgres,
+                aud.accion, 
+                aud.tabla_afectada, 
+                aud.registro_id_afectado,
+                aud.datos_anteriores, 
+                aud.datos_nuevos, 
+                aud.detalles_adicionales
+            FROM auditoria aud
+            LEFT JOIN usuarios u_app ON aud.usuario_id_app = u_app.id 
+            ORDER BY aud.fecha_hora DESC
+        """)
+        logs = cur.fetchall()
+        return jsonify(logs)
+    except psycopg2.Error as e:
+        app.logger.error(f"Error de BD al obtener logs de auditoría: {e}")
+        return jsonify({'error': 'Error al cargar los registros de auditoría.'}), 500
+    finally:
+        if conn:
+            conn.close()
 
 # --- Rutas para servir los archivos HTML ---
 @app.route('/')
 def index():
-    """Sirve la página principal de inicio de sesión."""
     return render_template('login.html')
 
 @app.route('/favicon.ico')
 def favicon():
-    """Responde con un estado 204 para solicitudes de favicon."""
-    return '', 204  # Responde con un estado 204 (sin contenido) para evitar errores.
+    return '', 204
 
-@app.route('/<path:path>')
-def serve_static(path):
-    """Sirve archivos estáticos o devuelve un error 404 si no se encuentran."""
-    # Si el archivo solicitado no existe, devuelve un error 404.
+@app.route('/<path:filename>')
+def serve_html_or_static(filename):
+    # Servir archivos HTML específicos desde la raíz de templates
+    if filename in ['admin.html', 'client.html', 'login.html', 'configuracion.html']: # Añade otros HTML raíz aquí
+        # Verificar sesión para páginas protegidas
+        if filename in ['admin.html', 'client.html', 'configuracion.html'] and 'user_id' not in session:
+            return render_template('login.html') # Redirigir a login si no hay sesión
+        try:
+            return render_template(filename)
+        except Exception as e: # jinja2.exceptions.TemplateNotFound
+            app.logger.warn(f"Template HTML no encontrado: {filename}, error: {e}")
+            # Podrías intentar servir desde static si no es un template conocido
+            # o simplemente devolver 404.
+            pass # Dejar que intente servir desde static
+    
+    # Intentar servir como archivo estático (CSS, JS, IMG)
     try:
-        if path in ['admin.html', 'client.html'] and 'user_id' not in session:
-            return render_template('login.html')
-        return render_template(path)
-    except Exception:
+        return send_from_directory(app.static_folder, filename)
+    except Exception as e: # werkzeug.exceptions.NotFound
+        app.logger.warn(f"Archivo estático o HTML no encontrado: {filename}, error: {e}")
         return "Archivo no encontrado", 404
 
 
 if __name__ == '__main__':
-    """Inicia la aplicación Flask en modo de depuración."""
+    # Configurar logging básico
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s: %(message)s [in %(pathname)s:%(lineno)d]')
+    app.logger.info("Iniciando la aplicación MediAlert...")
     app.run(debug=True, host='0.0.0.0', port=5000)
+
