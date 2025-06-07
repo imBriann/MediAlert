@@ -865,6 +865,12 @@ def get_mis_alertas_cliente():
             ORDER BY a.fecha_inicio, a.hora_preferida
         """, (cliente_id,))
         alertas = cur.fetchall()
+
+        # Convert time objects to strings
+        for alerta in alertas:
+            if isinstance(alerta.get('hora_preferida'), time):
+                alerta['hora_preferida'] = alerta['hora_preferida'].strftime('%H:%M:%S')
+
         return jsonify(alertas)
     except psycopg2.Error as e:
         app.logger.error(f"Error de BD al obtener mis_alertas para cliente {cliente_id}: {e}")
