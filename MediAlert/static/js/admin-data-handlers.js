@@ -200,63 +200,43 @@ async function loadMedicamentos() {
     }
 }
 
-async function loadAlertas(searchTerm = '') {
-    const tableBody = document.getElementById('alertas-table-body');
+async function loadAlertas(searchQuery = '') { // NUEVO: Añadir parámetro searchQuery
+    const tableBody = document.getElementById('clientes-con-alertas-table-body');
     if (!tableBody) {
-        console.error("Elemento 'alertas-table-body' no encontrado.");
+        console.error("Elemento 'clientes-con-alertas-table-body' no encontrado.");
         return;
     }
     try {
-        if (originalAlertasData.length === 0) {
-            originalAlertasData = await fetchData('/api/admin/alertas', 'Error al cargar alertas');
+        let url = '/api/admin/alertas?group_by_client=true';
+        if (searchQuery) { // NUEVO: Añadir parámetro de búsqueda a la URL
+            url += `&query=${encodeURIComponent(searchQuery)}`;
         }
-        
-        const normalizedSearchTerm = searchTerm.toLowerCase().trim();
-        const filteredAlertas = originalAlertasData.filter(a => {
-            const clienteNombre = a.cliente_nombre ? a.cliente_nombre.toLowerCase() : '';
-            const clienteCedula = a.cliente_cedula ? a.cliente_cedula.toLowerCase() : ''; // Asegúrate que la API provea cliente_cedula
-            const medicamentoNombre = a.medicamento_nombre ? a.medicamento_nombre.toLowerCase() : '';
-            return clienteNombre.includes(normalizedSearchTerm) || 
-                   clienteCedula.includes(normalizedSearchTerm) ||
-                   medicamentoNombre.includes(normalizedSearchTerm);
-        });
+        // Nueva llamada para obtener clientes con conteo de alertas
+        const clientesConAlertas = await fetchData(url, 'Error al cargar clientes con alertas'); // Modificada la URL
+        tableBody.innerHTML = '';
 
-        tableBody.innerHTML = ''; 
-
-        if (!filteredAlertas || filteredAlertas.length === 0) {
-            tableBody.innerHTML = `<tr><td colspan="10" class="text-center">No hay alertas ${normalizedSearchTerm ? 'que coincidan con la búsqueda' : 'registradas'}.</td></tr>`;
+        if (!clientesConAlertas || clientesConAlertas.length === 0) {
+            tableBody.innerHTML = '<tr><td colspan="5" class="text-center">No hay clientes con alertas registradas.</td></tr>';
             return;
         }
 
-        filteredAlertas.forEach(a => {
+        clientesConAlertas.forEach(c => {
+            const estadoBadgeClass = c.estado_usuario === 'activo' ? 'bg-success' : 'bg-danger';
             const row = tableBody.insertRow();
-            row.insertCell().textContent = a.cliente_nombre || 'N/A';
-            row.insertCell().textContent = a.cliente_cedula || 'N/A'; // New cell for Cédula
-            row.insertCell().textContent = a.medicamento_nombre || 'N/A';
-            row.insertCell().textContent = a.dosis || 'N/A';
-            row.insertCell().textContent = a.frecuencia || 'N/A';
-            row.insertCell().textContent = formatDate(a.fecha_inicio);
-            row.insertCell().textContent = formatDate(a.fecha_fin);
-            row.insertCell().textContent = formatTime(a.hora_preferida);
-            
-            const estadoCell = row.insertCell();
-            const estadoBadge = document.createElement('span');
-            let estadoClass = 'bg-secondary'; 
-            if (a.estado_alerta === 'activa') estadoClass = 'bg-success';
-            else if (a.estado_alerta === 'completada') estadoClass = 'bg-info';
-            else if (a.estado_alerta === 'inactiva') estadoClass = 'bg-warning';
-            else if (a.estado_alerta === 'fallida') estadoClass = 'bg-danger';
-            estadoBadge.className = `badge ${estadoClass}`;
-            estadoBadge.textContent = a.estado_alerta || 'N/A';
-            estadoCell.appendChild(estadoBadge);
-            
-            row.insertCell().innerHTML = `
-                <button class="btn btn-sm btn-info btn-edit-alerta" data-id="${a.id}" title="Editar Alerta"><i class="bi bi-pencil-square"></i></button>
-                <button class="btn btn-sm btn-danger btn-delete-alerta" data-id="${a.id}" title="Eliminar Alerta"><i class="bi bi-trash"></i></button>
+            row.insertCell().textContent = c.cliente_nombre || 'N/A';
+            row.insertCell().textContent = c.cedula || 'N/A';
+            row.insertCell().innerHTML = `<span class="badge ${estadoBadgeClass}">${c.estado_usuario || 'N/A'}</span>`;
+            row.insertCell().textContent = c.alertas_activas_count !== null ? c.alertas_activas_count : '0';
+
+            const actionsCell = row.insertCell();
+            actionsCell.innerHTML = `
+                <button class="btn btn-sm btn-primary btn-view-cliente-alerts" data-id="${c.usuario_id}" title="Ver Alertas del Cliente">
+                    <i class="bi bi-eye-fill"></i> Ver Alertas (${c.total_alertas_count})
+                </button>
             `;
         });
     } catch (error) {
-         renderErrorRow(tableBody, 10, error); // Colspan updated to 10
+         renderErrorRow(tableBody, 5, error);
     }
 }
 

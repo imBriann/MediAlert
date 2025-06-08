@@ -210,8 +210,8 @@ def manage_clientes():
         if request.method == 'GET':
             estado_filtro = request.args.get('estado', None)
             rol_filtro = request.args.get('rol', None)
+            search_query = request.args.get('query', None)  # NUEVO: Parámetro de búsqueda
 
-            # Incluir los nuevos campos en la selección
             query_parts = ["SELECT id, nombre, cedula, email, rol, estado_usuario, fecha_nacimiento, telefono, ciudad, fecha_registro FROM usuarios"]
             conditions = []
             params = []
@@ -219,18 +219,23 @@ def manage_clientes():
             if rol_filtro:
                 if rol_filtro == 'cliente':
                     conditions.append("rol = 'cliente'")
-                elif rol_filtro == 'admin': # Si se quiere listar admins también por esta ruta
+                elif rol_filtro == 'admin':
                     conditions.append("rol = 'admin'")
-            
+
             if estado_filtro and estado_filtro != 'todos':
                 conditions.append("estado_usuario = %s")
                 params.append(estado_filtro)
-            
+
+            if search_query:  # NUEVO: Lógica de búsqueda
+                conditions.append("(nombre ILIKE %s OR cedula ILIKE %s)")
+                params.append(f"%{search_query}%")
+                params.append(f"%{search_query}%")
+
             if conditions:
                 query_parts.append("WHERE " + " AND ".join(conditions))
-            
+
             query_parts.append("ORDER BY rol, nombre")
-            
+
             final_query = " ".join(query_parts)
             cur.execute(final_query, tuple(params))
             users = cur.fetchall()
@@ -647,6 +652,8 @@ def manage_single_medicamento(mid):
         if conn:
             conn.close()
 
+# ... (imports existentes)
+
 # --- API: GESTIÓN DE ALERTAS ---
 @app.route('/api/admin/alertas', methods=['GET', 'POST'])
 @admin_required
@@ -658,41 +665,80 @@ def manage_alertas_admin():
         admin_id_actual = session.get('user_id')
 
         if request.method == 'GET':
-            usuario_id_filtro = request.args.get('usuario_id', type=int)  # New filter for specific user
+            usuario_id_filtro = request.args.get('usuario_id', type=int)
+            group_by_client = request.args.get('group_by_client', 'false').lower() == 'true'
+            search_query = request.args.get('query', None)  # NUEVO: Parámetro de búsqueda
 
-            # Build the base query
-            query_parts = ["""
-                SELECT 
-                    a.id, a.usuario_id, u.nombre as cliente_nombre, u.cedula as cliente_cedula,  /* MODIFIED: Added u.cedula */
-                    u.estado_usuario,
-                    a.medicamento_id, m.nombre as medicamento_nombre, m.estado_medicamento,
-                    a.dosis, a.frecuencia, a.fecha_inicio, a.fecha_fin, a.hora_preferida, a.estado as estado_alerta
-                FROM alertas a
-                JOIN usuarios u ON a.usuario_id = u.id
-                JOIN medicamentos m ON a.medicamento_id = m.id
-            """]
-            conditions = []
-            params = []
+            if group_by_client:
+                query_parts = ["""
+                    SELECT
+                        u.id as usuario_id,
+                        u.nombre as cliente_nombre,
+                        u.cedula,
+                        u.estado_usuario,
+                        COUNT(CASE WHEN a.estado = 'activa' THEN 1 ELSE NULL END) as alertas_activas_count,
+                        COUNT(a.id) as total_alertas_count
+                    FROM usuarios u
+                    LEFT JOIN alertas a ON u.id = a.usuario_id
+                    LEFT JOIN medicamentos m ON a.medicamento_id = m.id
+                    WHERE u.rol = 'cliente'
+                """]
+                conditions = []
+                params = []
 
-            if usuario_id_filtro:
-                conditions.append("a.usuario_id = %s")
-                params.append(usuario_id_filtro)
+                if search_query:  # NUEVO: Lógica de búsqueda
+                    conditions.append("(u.nombre ILIKE %s OR u.cedula ILIKE %s OR m.nombre ILIKE %s)")
+                    params.append(f"%{search_query}%")
+                    params.append(f"%{search_query}%")
+                    params.append(f"%{search_query}%")
 
-            if conditions:
-                query_parts.append("WHERE " + " AND ".join(conditions))
-            
-            query_parts.append("ORDER BY u.nombre, m.nombre, a.fecha_inicio")
-            
-            final_query = " ".join(query_parts)
-            cur.execute(final_query, tuple(params))
-            alertas = cur.fetchall()
-            
-            for alerta in alertas:
-                if isinstance(alerta.get('hora_preferida'), (time,)):
-                    alerta['hora_preferida'] = alerta['hora_preferida'].strftime('%H:%M:%S')
-            return jsonify(alertas)
+                if conditions:
+                    query_parts.append(" AND " + " AND ".join(conditions))
+
+                query_parts.append("""
+                    GROUP BY u.id, u.nombre, u.cedula, u.estado_usuario
+                    ORDER BY u.nombre;
+                """)
+
+                final_query = " ".join(query_parts)
+                cur.execute(final_query, tuple(params))
+                clientes_con_alertas = cur.fetchall()
+                return jsonify(clientes_con_alertas)
+
+            else:
+                # Consulta original para listar todas las alertas (o filtrar por usuario_id)
+                query_parts = ["""
+                    SELECT
+                        a.id, a.usuario_id, u.nombre as cliente_nombre, u.estado_usuario,
+                        a.medicamento_id, m.nombre as medicamento_nombre, m.estado_medicamento,
+                        a.dosis, a.frecuencia, a.fecha_inicio, a.fecha_fin, a.hora_preferida, a.estado as estado_alerta
+                    FROM alertas a
+                    JOIN usuarios u ON a.usuario_id = u.id
+                    JOIN medicamentos m ON a.medicamento_id = m.id
+                """]
+                conditions = []
+                params = []
+
+                if usuario_id_filtro:
+                    conditions.append("a.usuario_id = %s")
+                    params.append(usuario_id_filtro)
+
+                if conditions:
+                    query_parts.append("WHERE " + " AND ".join(conditions))
+
+                query_parts.append("ORDER BY u.nombre, m.nombre, a.fecha_inicio")
+
+                final_query = " ".join(query_parts)
+                cur.execute(final_query, tuple(params))
+                alertas = cur.fetchall()
+
+                for alerta in alertas:
+                    if isinstance(alerta.get('hora_preferida'), (time,)):
+                        alerta['hora_preferida'] = alerta['hora_preferida'].strftime('%H:%M:%S')
+                return jsonify(alertas)
 
         if request.method == 'POST':
+            # ... (código existente para POST, no necesita cambios)
             data = request.json
             usuario_id = data.get('usuario_id')
             medicamento_id = data.get('medicamento_id')
@@ -705,7 +751,7 @@ def manage_alertas_admin():
             user_check = cur.fetchone()
             if not user_check or user_check['estado_usuario'] != 'activo':
                 return jsonify({'error': 'El usuario seleccionado no es un cliente activo.'}), 400
-            
+
             cur.execute("SELECT estado_medicamento FROM medicamentos WHERE id = %s", (medicamento_id,))
             med_check = cur.fetchone()
             if not med_check or med_check['estado_medicamento'] != 'disponible':
@@ -731,8 +777,8 @@ def manage_alertas_admin():
                 new_id = cur.fetchone()['id']
                 conn.commit()
                 registrar_auditoria_aplicacion(
-                    'CREACION_ALERTA', 
-                    tabla_afectada='alertas', 
+                    'CREACION_ALERTA',
+                    tabla_afectada='alertas',
                     registro_id=str(new_id),
                     datos_nuevos=data,
                     detalles_adicionales={'creado_por_admin_id': admin_id_actual}

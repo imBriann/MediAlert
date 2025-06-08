@@ -163,6 +163,11 @@ document.addEventListener('DOMContentLoaded', () => {
             openClientDetailModal(targetElement.dataset.id);
         }
 
+        // --- NUEVO: Botón "Ver Alertas" en la tabla de Clientes con Alertas (en vista de alertas) ---
+        if (targetElement.matches('.btn-view-cliente-alerts') && typeof openClientDetailModal === 'function') {
+            openClientDetailModal(targetElement.dataset.id);
+        }
+
         const clickableCardArea = targetElement.closest('.client-card-clickable-area');
         if (clickableCardArea) {
             if (targetElement.closest('button')) {
@@ -205,31 +210,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     console.error(`Error al ${actionText} medicamento:`, error);
                     // Use global notification modal
                     showGlobalNotification('Error de Actualización', `Error al ${actionText} medicamento: ${error.message}`, 'error');
-                }
-            }
-        }
-
-        // Botones de Acción en Tablas (Alertas)
-        if (targetElement.matches('.btn-edit-alerta') && typeof openAlertaModal === 'function') {
-            openAlertaModal(targetElement.dataset.id);
-        }
-        if (targetElement.matches('.btn-delete-alerta')) {
-            const alertaId = targetElement.dataset.id;
-            const row = targetElement.closest('tr');
-            const cliente = row ? row.cells[0].textContent : 'esta alerta';
-            const medicamento = row ? row.cells[1].textContent : '';
-
-            if (confirm(`¿Estás seguro de que quieres ELIMINAR la alerta para ${cliente} del medicamento ${medicamento}? Esta acción es irreversible.`)) {
-                try {
-                    const response = await fetch(`/api/admin/alertas/${alertaId}`, { method: 'DELETE' });
-                    const responseData = await response.json();
-                    if (!response.ok) throw new Error(responseData.error || 'Error al eliminar la alerta.');
-                    alert(responseData.message || 'Alerta eliminada con éxito.');
-                    originalAlertasData = []; // Invalidate cache
-                    if (typeof loadAlertas === 'function') loadAlertas(searchAlertasInput ? searchAlertasInput.value : '');
-                } catch (error) {
-                    console.error("Error al eliminar alerta:", error);
-                    alert(`Error al eliminar alerta: ${error.message}`);
                 }
             }
         }

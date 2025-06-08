@@ -130,26 +130,29 @@
             </div>
             
             <div id="view-alertas" class="view-content" style="display: none;">
-                <h1>Gestión de Alertas</h1>
+                <h1>Gestión de Alertas por Cliente</h1>
                 <div class="d-flex justify-content-between align-items-center mb-3">
-                    <button class="btn btn-primary" id="btn-add-alerta"><i class="bi bi-plus-circle"></i> Asignar Alerta</button>
-                    <div class="search-bar-container ms-3">
-                        <div class="input-group input-group-sm">
-                            <span class="input-group-text" id="search-addon-alertas"><i class="bi bi-search"></i></span>
-                            <input type="text" id="search-alertas" class="form-control" placeholder="Buscar por medicamento, cliente (nombre/cédula)..." aria-label="Buscar alertas" aria-describedby="search-addon-alertas">
-                        </div>
+                    <button class="btn btn-primary" id="btn-add-alerta"><i class="bi bi-plus-circle"></i> Asignar Nueva Alerta</button>
+                    <div class="input-group" style="width: 400px;">
+                        <input type="text" class="form-control" id="search-alertas-input" placeholder="Buscar cliente o medicamento...">
+                        <button class="btn btn-outline-secondary" type="button" id="btn-search-alertas">
+                            <i class="bi bi-search"></i>
+                        </button>
                     </div>
                 </div>
                 <div class="table-responsive">
                     <table class="table table-hover">
                         <thead>
                             <tr>
-                                <th>Cliente</th><th>Cédula Cliente</th><th>Medicamento</th><th>Dosis</th><th>Frecuencia</th>
-                                <th>Fecha Inicio</th><th>Fecha Fin</th><th>Hora Preferida</th><th>Estado Alerta</th>
+                                <th>Cliente</th>
+                                <th>Cédula</th>
+                                <th>Estado Cliente</th>
+                                <th>Número de Alertas Activas</th>
                                 <th>Acciones</th>
                             </tr>
                         </thead>
-                        <tbody id="alertas-table-body"></tbody>
+                        <tbody id="clientes-con-alertas-table-body">
+                            </tbody>
                     </table>
                 </div>
             </div>
