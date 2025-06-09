@@ -1,10 +1,15 @@
 // static/js/admin-data-handlers.js
 
 // Store original data to filter client-side
+
+// Store original data to filter client-side
 let originalClientesData = [];
 let originalMedicamentosData = [];
-let originalAlertasData = [];
+let originalAlertasData = []; // This is for the detailed alerts, not the grouped view
+let originalClientesConAlertasData = []; // NEW: Add this line for the grouped alerts view
 let originalAuditoriaData = [];
+
+// ... (fetchData, renderErrorRow, etc. remain the same)
 
 async function fetchData(url, errorMessagePrefix) {
     try {
@@ -108,6 +113,18 @@ async function loadClientes(searchTerm = '') {
     try {
         if (originalClientesData.length === 0) { // Fetch only if not already fetched
             originalClientesData = await fetchData('/api/admin/clientes?rol=cliente&estado=todos', 'Error al cargar clientes');
+            
+            // NEW: Sort data after fetching
+            originalClientesData.sort((a, b) => {
+                // Primary sort: 'activo' users first
+                const statusA = a.estado_usuario === 'activo' ? 0 : 1;
+                const statusB = b.estado_usuario === 'activo' ? 0 : 1;
+                if (statusA !== statusB) {
+                    return statusA - statusB;
+                }
+                // Secondary sort: alphabetically by name
+                return (a.nombre || '').localeCompare(b.nombre || '');
+            });
         }
         
         const normalizedSearchTerm = searchTerm.toLowerCase().trim();
@@ -165,20 +182,45 @@ async function loadClientes(searchTerm = '') {
     }
 }
 
-async function loadMedicamentos() {
+async function loadMedicamentos(searchTerm = '') {
     const tableBody = document.getElementById('medicamentos-table-body');
-     if (!tableBody) {
+    if (!tableBody) {
         console.error("Elemento 'medicamentos-table-body' no encontrado.");
         return;
     }
+
     try {
-        const medicamentos = await fetchData('/api/admin/medicamentos?estado=todos', 'Error al cargar medicamentos');
+        if (originalMedicamentosData.length === 0) {
+            originalMedicamentosData = await fetchData('/api/admin/medicamentos?estado=todos', 'Error al cargar medicamentos');
+            
+            // NEW: Sort data after fetching
+            originalMedicamentosData.sort((a, b) => {
+                // Primary sort: 'disponible' medicines first
+                const statusA = a.estado_medicamento === 'disponible' ? 0 : 1;
+                const statusB = b.estado_medicamento === 'disponible' ? 0 : 1;
+                if (statusA !== statusB) {
+                    return statusA - statusB;
+                }
+                // Secondary sort: alphabetically by name
+                return (a.nombre || '').localeCompare(b.nombre || '');
+            });
+        }
+
+        const normalizedSearchTerm = searchTerm.toLowerCase().trim();
+        const filteredMedicamentos = originalMedicamentosData.filter(m => {
+            const nombre = m.nombre ? m.nombre.toLowerCase() : '';
+            return nombre.includes(normalizedSearchTerm);
+        });
+
         tableBody.innerHTML = '';
-        if (!medicamentos || medicamentos.length === 0) {
-            tableBody.innerHTML = '<tr><td colspan="5" class="text-center">No hay medicamentos registrados.</td></tr>';
+        if (!filteredMedicamentos || filteredMedicamentos.length === 0) {
+            tableBody.innerHTML = `<tr><td colspan="5" class="text-center">No hay medicamentos ${searchTerm ? 'que coincidan con la búsqueda' : 'registrados'}.</td></tr>`;
         } else {
-            medicamentos.forEach(m => {
+            filteredMedicamentos.forEach(m => {
                 const estadoBadgeClass = m.estado_medicamento === 'disponible' ? 'bg-success' : 'bg-danger';
+                const toggleButtonIcon = m.estado_medicamento === 'disponible' ? 'bi-capsule' : 'bi-capsule-pill';
+                const toggleButtonTitle = m.estado_medicamento === 'disponible' ? 'Discontinuar' : 'Reactivar';
+                
                 tableBody.innerHTML += `
                     <tr>
                         <td>${m.nombre || 'N/A'}</td>
@@ -189,8 +231,9 @@ async function loadMedicamentos() {
                             <button class="btn btn-sm btn-info btn-edit-medicamento" data-id="${m.id}" title="Editar Medicamento">
                                 <i class="bi bi-pencil-square"></i>
                             </button>
-                            <button class="btn btn-sm btn-warning btn-delete-medicamento" data-id="${m.id}" data-nombre="${m.nombre}" title="${m.estado_medicamento === 'disponible' ? 'Discontinuar' : 'Reactivar'} Medicamento">
-                                <i class="bi ${m.estado_medicamento === 'disponible' ? 'bi-capsule-pill' : 'bi-capsule'}"></i> </button>
+                            <button class="btn btn-sm btn-warning btn-delete-medicamento" data-id="${m.id}" data-nombre="${m.nombre}" title="${toggleButtonTitle} Medicamento">
+                                <i class="bi ${toggleButtonIcon}"></i>
+                            </button>
                         </td>
                     </tr>`;
             });
@@ -200,27 +243,45 @@ async function loadMedicamentos() {
     }
 }
 
-async function loadAlertas(searchQuery = '') { // NUEVO: Añadir parámetro searchQuery
+async function loadAlertas(searchQuery = '') {
     const tableBody = document.getElementById('clientes-con-alertas-table-body');
     if (!tableBody) {
         console.error("Elemento 'clientes-con-alertas-table-body' no encontrado.");
         return;
     }
-    try {
-        let url = '/api/admin/alertas?group_by_client=true';
-        if (searchQuery) { // NUEVO: Añadir parámetro de búsqueda a la URL
-            url += `&query=${encodeURIComponent(searchQuery)}`;
-        }
-        // Nueva llamada para obtener clientes con conteo de alertas
-        const clientesConAlertas = await fetchData(url, 'Error al cargar clientes con alertas'); // Modificada la URL
-        tableBody.innerHTML = '';
 
-        if (!clientesConAlertas || clientesConAlertas.length === 0) {
-            tableBody.innerHTML = '<tr><td colspan="5" class="text-center">No hay clientes con alertas registradas.</td></tr>';
+    try {
+        if (originalClientesConAlertasData.length === 0) {
+            const url = '/api/admin/alertas?group_by_client=true';
+            originalClientesConAlertasData = await fetchData(url, 'Error al cargar clientes con alertas');
+
+            // NEW: Sort data after fetching
+            originalClientesConAlertasData.sort((a, b) => {
+                // Primary sort: 'activo' users first
+                const statusA = a.estado_usuario === 'activo' ? 0 : 1;
+                const statusB = b.estado_usuario === 'activo' ? 0 : 1;
+                if (statusA !== statusB) {
+                    return statusA - statusB;
+                }
+                // Secondary sort: alphabetically by client name
+                return (a.cliente_nombre || '').localeCompare(b.cliente_nombre || '');
+            });
+        }
+
+        const normalizedSearchTerm = searchQuery.toLowerCase().trim();
+        const filteredData = originalClientesConAlertasData.filter(c => {
+            const nombre = c.cliente_nombre ? c.cliente_nombre.toLowerCase() : '';
+            const cedula = c.cedula ? c.cedula.toLowerCase() : '';
+            return nombre.includes(normalizedSearchTerm) || cedula.includes(normalizedSearchTerm);
+        });
+
+        tableBody.innerHTML = '';
+        if (!filteredData || filteredData.length === 0) {
+            tableBody.innerHTML = `<tr><td colspan="5" class="text-center">No hay clientes ${searchQuery ? 'que coincidan con la búsqueda' : 'con alertas registradas'}.</td></tr>`;
             return;
         }
 
-        clientesConAlertas.forEach(c => {
+        filteredData.forEach(c => {
             const estadoBadgeClass = c.estado_usuario === 'activo' ? 'bg-success' : 'bg-danger';
             const row = tableBody.insertRow();
             row.insertCell().textContent = c.cliente_nombre || 'N/A';
@@ -236,7 +297,7 @@ async function loadAlertas(searchQuery = '') { // NUEVO: Añadir parámetro sear
             `;
         });
     } catch (error) {
-         renderErrorRow(tableBody, 5, error);
+        renderErrorRow(tableBody, 5, error);
     }
 }
 
@@ -444,5 +505,6 @@ function resetOriginalData() {
     originalClientesData = [];
     originalMedicamentosData = [];
     originalAlertasData = [];
+    originalClientesConAlertasData = []; // ADD THIS LINE
     originalAuditoriaData = [];
 }

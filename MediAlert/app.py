@@ -670,7 +670,7 @@ def manage_alertas_admin():
             search_query = request.args.get('query', None)  # NUEVO: Parámetro de búsqueda
 
             if group_by_client:
-                query_parts = ["""
+                query = """
                     SELECT
                         u.id as usuario_id,
                         u.nombre as cliente_nombre,
@@ -680,28 +680,11 @@ def manage_alertas_admin():
                         COUNT(a.id) as total_alertas_count
                     FROM usuarios u
                     LEFT JOIN alertas a ON u.id = a.usuario_id
-                    LEFT JOIN medicamentos m ON a.medicamento_id = m.id
                     WHERE u.rol = 'cliente'
-                """]
-                conditions = []
-                params = []
-
-                if search_query:  # NUEVO: Lógica de búsqueda
-                    conditions.append("(u.nombre ILIKE %s OR u.cedula ILIKE %s OR m.nombre ILIKE %s)")
-                    params.append(f"%{search_query}%")
-                    params.append(f"%{search_query}%")
-                    params.append(f"%{search_query}%")
-
-                if conditions:
-                    query_parts.append(" AND " + " AND ".join(conditions))
-
-                query_parts.append("""
                     GROUP BY u.id, u.nombre, u.cedula, u.estado_usuario
                     ORDER BY u.nombre;
-                """)
-
-                final_query = " ".join(query_parts)
-                cur.execute(final_query, tuple(params))
+                """
+                cur.execute(query)
                 clientes_con_alertas = cur.fetchall()
                 return jsonify(clientes_con_alertas)
 

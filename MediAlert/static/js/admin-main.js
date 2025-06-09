@@ -56,10 +56,13 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    const searchAlertasInput = document.getElementById('search-alertas');
+    // ESTE ES EL BLOQUE CORRECTO PARA LAS ALERTAS
+    const searchAlertasInput = document.getElementById('search-alertas-input');
     if (searchAlertasInput) {
         searchAlertasInput.addEventListener('input', () => {
-            if (typeof loadAlertas === 'function') loadAlertas(searchAlertasInput.value);
+            if (typeof loadAlertas === 'function') {
+                loadAlertas(searchAlertasInput.value);
+            }
         });
     }
 
