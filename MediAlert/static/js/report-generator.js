@@ -108,12 +108,12 @@ function addPdfFooter(doc, data) {
 }
 
 
-async function uploadPdfAndLog(pdfBlob, originalFilename, reportTypeForLog, reportTitleForLog) { //
+async function uploadPdfAndLog(pdfBlob, originalFilename, reportTypeForLog, reportTitleForLog) {
     const formData = new FormData();
     formData.append('report_pdf', pdfBlob, originalFilename + ".pdf");
 
     try {
-        const uploadResponse = await fetch('/api/admin/reportes/upload_pdf', { //
+        const uploadResponse = await fetch('/api/admin/reportes/upload_pdf', {
             method: 'POST',
             body: formData
         });
@@ -125,7 +125,7 @@ async function uploadPdfAndLog(pdfBlob, originalFilename, reportTypeForLog, repo
         const uploadResult = await uploadResponse.json();
         const serverFilename = uploadResult.filename;
 
-        const logResponse = await fetch('/api/admin/reportes_log', { //
+        const logResponse = await fetch('/api/admin/reportes_log', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -170,9 +170,9 @@ async function generatePdfAndUpload(reportConfig) {
         return value !== undefined && value !== null ? String(value) : '';
     }));
 
-    console.log("generatePdfAndUpload - Datos para la tabla:", JSON.parse(JSON.stringify(data))); //
-    console.log("generatePdfAndUpload - Cabeceras para la tabla:", JSON.parse(JSON.stringify(headForTable))); //
-    console.log("generatePdfAndUpload - Cuerpo procesado para la tabla:", JSON.parse(JSON.stringify(bodyForTable))); //
+    console.log("generatePdfAndUpload - Datos para la tabla:", JSON.parse(JSON.stringify(data)));
+    console.log("generatePdfAndUpload - Cabeceras para la tabla:", JSON.parse(JSON.stringify(headForTable)));
+    console.log("generatePdfAndUpload - Cuerpo procesado para la tabla:", JSON.parse(JSON.stringify(bodyForTable)));
 
     doc.autoTable({
         startY: tableStartY,
@@ -217,8 +217,8 @@ async function generatePdfAndUpload(reportConfig) {
 
 async function generateUsuariosReport() {
     try {
-        const clientesPromise = fetchData('/api/admin/clientes?estado=todos&rol=cliente', 'Error al obtener datos de clientes'); //
-        const adminsPromise = fetchData('/api/admin/clientes?estado=todos&rol=admin', 'Error al obtener datos de administradores'); //
+        const clientesPromise = fetchData('/api/admin/clientes?estado=todos&rol=cliente', 'Error al obtener datos de clientes');
+        const adminsPromise = fetchData('/api/admin/clientes?estado=todos&rol=admin', 'Error al obtener datos de administradores');
         const [clientes, admins] = await Promise.all([clientesPromise, adminsPromise]);
         
         console.log("generateUsuariosReport - Clientes fetched:", JSON.parse(JSON.stringify(clientes || [])));
@@ -260,7 +260,7 @@ async function generateUsuariosReport() {
 
 async function generateMedicamentosReport() {
     try {
-        const medicamentos = await fetchData('/api/admin/medicamentos?estado=todos', 'Error al obtener datos de medicamentos'); //
+        const medicamentos = await fetchData('/api/admin/medicamentos?estado=todos', 'Error al obtener datos de medicamentos');
         console.log("generateMedicamentosReport - Medicamentos fetched:", JSON.parse(JSON.stringify(medicamentos || [])));
         if (!medicamentos || !medicamentos.length) { alert('No hay datos de medicamentos para generar el reporte.'); return; }
 
@@ -295,7 +295,7 @@ async function generateMedicamentosReport() {
 
 async function generateAlertasActivasReport() {
     try {
-        const alertas = await fetchData('/api/admin/alertas', 'Error al obtener datos de alertas'); //
+        const alertas = await fetchData('/api/admin/alertas', 'Error al obtener datos de alertas');
         console.log("generateAlertasActivasReport - Alertas fetched:", JSON.parse(JSON.stringify(alertas || [])));
         const activas = alertas.filter(a => a.estado_alerta === 'activa');
         if (!activas.length) { alert('No hay alertas activas para generar el reporte.'); return; }
@@ -329,7 +329,7 @@ async function generateAlertasActivasReport() {
 
 async function generateAuditoriaReport() {
     try {
-        const logs = await fetchData('/api/admin/auditoria?limit=100', 'Error al obtener datos de auditoría'); //
+        const logs = await fetchData('/api/admin/auditoria?limit=100', 'Error al obtener datos de auditoría');
         console.log("generateAuditoriaReport - Logs fetched:", JSON.parse(JSON.stringify(logs || [])));
         if (!logs || !logs.length) { alert('No hay datos de auditoría para generar el reporte.'); return; }
         
@@ -383,5 +383,143 @@ async function generateAuditoriaReport() {
     } catch (error) { console.error('Error generando reporte de auditoría:', error); alert('No se pudo generar el reporte de auditoría: ' + error.message); }
 }
 
-// Funciones formatDate, formatTime, getFriendlyTableName y fetchData se esperan
-// desde admin-data-handlers.js, que debe cargarse ANTES de este script.
+/**
+ * Helper para formatear fechas de nacimiento específicamente para recetas.
+ * Incluye el cálculo de edad.
+ */
+function formatDateOfBirth(dateString) {
+    if (!dateString || String(dateString).trim() === '') {
+        return 'N/A';
+    }
+    try {
+        const birthDate = new Date(dateString + 'T00:00:00Z'); // Tratar como UTC
+        if (isNaN(birthDate.getTime())) {
+            return dateString;
+        }
+        const today = new Date();
+        let age = today.getFullYear() - birthDate.getFullYear();
+        const m = today.getMonth() - birthDate.getMonth();
+        if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+            age--;
+        }
+        
+        return `${birthDate.toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' })} (Edad: ${age})`;
+    } catch (e) {
+        console.error("Error en formatDateOfBirth:", e);
+        return dateString;
+    }
+}
+
+/**
+ * Genera un PDF de receta médica para una alerta específica.
+ * @param {number} alertaId El ID de la alerta para la cual generar la receta.
+ */
+async function generateRecetaMedicaPdf(alertaId) {
+    showGlobalNotification('Generando Receta', 'Preparando la receta médica, por favor espere...', 'info');
+    try {
+        const recetaData = await fetchData(`/api/receta_medica/${alertaId}`, 'Error al obtener datos de la receta');
+
+        if (!recetaData) {
+            throw new Error('No se encontraron datos para la receta.');
+        }
+
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF('p', 'pt', 'a4');
+        const margin = 40;
+        let currentY = 40;
+        const lineHeight = 14; // Aumentado para mejor legibilidad
+
+        await addPdfHeader(doc, `Receta Médica - Alerta #${recetaData.alerta_id}`);
+        currentY = 100; // Espacio después del encabezado estándar
+
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(10);
+        doc.setTextColor(50, 50, 50);
+
+        // Información del Cliente
+        doc.setFont('helvetica', 'bold');
+        doc.text('Información del Paciente:', margin, currentY);
+        currentY += lineHeight;
+        doc.setFont('helvetica', 'normal');
+        doc.text(`Nombre: ${recetaData.cliente_nombre || 'N/A'}`, margin, currentY);
+        currentY += lineHeight;
+        doc.text(`Cédula: ${recetaData.cliente_cedula || 'N/A'}`, margin, currentY);
+        currentY += lineHeight;
+        doc.text(`Fecha Nacimiento: ${formatDateOfBirth(recetaData.cliente_fecha_nacimiento)}`, margin, currentY);
+        currentY += lineHeight;
+        doc.text(`Teléfono: ${recetaData.cliente_telefono || 'N/A'}`, margin, currentY);
+        currentY += lineHeight;
+        doc.text(`Ciudad: ${recetaData.cliente_ciudad || 'N/A'}`, margin, currentY);
+        currentY += lineHeight;
+        doc.text(`EPS: ${recetaData.eps_nombre || 'N/A'}`, margin, currentY);
+        currentY += lineHeight * 2; // Espacio extra
+
+        // Información del Medicamento Recetado
+        doc.setFont('helvetica', 'bold');
+        doc.text('Medicamento Recetado:', margin, currentY);
+        currentY += lineHeight;
+        doc.setFont('helvetica', 'normal');
+        doc.text(`Nombre: ${recetaData.medicamento_nombre || 'N/A'}`, margin, currentY);
+        currentY += lineHeight;
+        doc.text(`Descripción: ${recetaData.medicamento_descripcion || 'N/A'}`, margin, currentY, { maxWidth: doc.internal.pageSize.getWidth() - 2 * margin });
+        // autoTable does not update doc.lastAutoTable.finalY when not used for table
+        // A simple doc.text will return the y coordinate after drawing, so we use that.
+        // For multi-line text, we need to calculate total height
+        let splitDescription = doc.splitTextToSize(recetaData.medicamento_descripcion || 'N/A', doc.internal.pageSize.getWidth() - 2 * margin);
+        currentY += (splitDescription.length * (doc.getFontSize() * 1.2)); // Factor 1.2 para el espaciado entre líneas
+        
+        doc.text(`Composición: ${recetaData.medicamento_composicion || 'N/A'}`, margin, currentY, { maxWidth: doc.internal.pageSize.getWidth() - 2 * margin });
+        let splitComposicion = doc.splitTextToSize(recetaData.medicamento_composicion || 'N/A', doc.internal.pageSize.getWidth() - 2 * margin);
+        currentY += (splitComposicion.length * (doc.getFontSize() * 1.2));
+
+        doc.text(`Indicaciones: ${recetaData.medicamento_indicaciones || 'N/A'}`, margin, currentY, { maxWidth: doc.internal.pageSize.getWidth() - 2 * margin });
+        let splitIndicaciones = doc.splitTextToSize(recetaData.medicamento_indicaciones || 'N/A', doc.internal.pageSize.getWidth() - 2 * margin);
+        currentY += (splitIndicaciones.length * (doc.getFontSize() * 1.2));
+        
+        doc.text(`Dosis: ${recetaData.dosis || 'N/A'}`, margin, currentY);
+        currentY += lineHeight;
+        doc.text(`Frecuencia: ${recetaData.frecuencia || 'N/A'}`, margin, currentY);
+        currentY += lineHeight;
+        doc.text(`Rango de Edad: ${recetaData.medicamento_rango_edad || 'N/A'}`, margin, currentY);
+        currentY += lineHeight * 2;
+
+        // Período de Administración
+        doc.setFont('helvetica', 'bold');
+        doc.text('Período de Administración:', margin, currentY);
+        currentY += lineHeight;
+        doc.setFont('helvetica', 'normal');
+        doc.text(`Fecha de Inicio: ${formatDate(recetaData.fecha_inicio)}`, margin, currentY);
+        currentY += lineHeight;
+        doc.text(`Fecha de Fin: ${recetaData.fecha_fin ? formatDate(recetaData.fecha_fin) : 'Indefinido'}`, margin, currentY);
+        currentY += lineHeight;
+        doc.text(`Hora Preferida: ${recetaData.hora_preferida ? formatTime(recetaData.hora_preferida) : 'Cualquier hora / N/A'}`, margin, currentY);
+        currentY += lineHeight * 3; // Espacio extra para la firma
+
+        // Firma del Asignador
+        doc.setFont('helvetica', 'bold');
+        doc.text('Asignado por:', margin, currentY);
+        currentY += lineHeight;
+        doc.setFont('helvetica', 'normal');
+        doc.text(`_____________________________________`, margin, currentY); // Línea para la firma
+        currentY += 5; // Espacio para el texto de la firma
+        doc.text(`${recetaData.asignador_nombre || 'Sistema MediAlert'}`, margin, currentY);
+        currentY += lineHeight;
+        doc.text(`Cédula: ${recetaData.asignador_cedula || 'N/A'}`, margin, currentY);
+        currentY += lineHeight;
+        doc.text(`Rol: ${recetaData.asignador_rol || 'N/A'}`, margin, currentY);
+        currentY += lineHeight * 2;
+
+        // Footer (ya manejado por addPdfFooter en autoTable, pero si no usas autoTable, lo añades manualmente)
+        // Como este PDF no usa autoTable para el contenido principal, añadimos el footer manualmente.
+        addPdfFooter(doc, { pageNumber: 1 }); // Pasamos pageNumber 1 ya que es una sola página
+
+        doc.save(`Receta_Medica_Alerta_${alertaId}_${new Date().toISOString().slice(0, 10)}.pdf`);
+        const pdfBlob = doc.output('blob');
+        await uploadPdfAndLog(pdfBlob, `Receta_Medica_Alerta_${alertaId}`, 'receta_medica', `Receta Médica Alerta #${alertaId}`);
+        showGlobalNotification('Receta Generada', 'La receta médica se ha generado y descargado con éxito.', 'success');
+
+    } catch (error) {
+        console.error('Error generando receta médica:', error);
+        showGlobalNotification('Error', `No se pudo generar la receta médica: ${error.message}`, 'error');
+    }
+}

@@ -3,7 +3,8 @@ import os
 from dotenv import load_dotenv
 from werkzeug.security import generate_password_hash
 import random
-from datetime import datetime, timedelta, date # Asegúrate de importar date
+from datetime import datetime, timedelta, date
+import re # Importar el módulo re
 
 # Cargar variables de entorno desde el archivo .env
 load_dotenv()
@@ -135,6 +136,28 @@ lista_medicamentos_a_insertar = [
     {"nombre": "Hierro Fumarato 200mg", "descripcion": "Suplemento de hierro.", "composicion": "Fumarato ferroso 200mg", "sintomas_secundarios": "Estreñimiento, heces oscuras", "indicaciones": "Anemia ferropénica", "rango_edad": "Todas las edades", "estado_medicamento": "disponible"}
 ]
 
+# Lista de usuarios de Oracle proporcionados
+oracle_users_data = [
+    {"username": "ACEVEDO", "email": "acevedobrian499@gmail.com"},
+    {"username": "ALVEAR", "email": "eineralvear77@gmail.com"},
+    {"username": "AMADO", "email": "brayanamadoitg7c@gmail.com"},
+    {"username": "CARRILLO", "email": "jusecare015@gmail.com"},
+    {"username": "ESCAMILLA", "email": "carlosescamilla2023@gmail.com"},
+    {"username": "FAJARDO", "email": "xiomystefanny27@gmail.com"},
+    {"username": "GUERRERO", "email": "yarlyguerrero17@gmail.com"},
+    {"username": "HERNÁNDEZ", "email": "jersahercal1904@gmail.com"},
+    {"username": "MARQUEZ", "email": "marquezkevin467@gmail.com"},
+    {"username": "OCHOA", "email": "juancamiloochoajaimes1@gmail.com"},
+    {"username": "PULIDO", "email": "pulidojulian00@gmail.com"},
+    {"username": "RODRIGUEZ", "email": "dfra0512@outlook.com"},
+    {"username": "ROJASC", "email": "carlosrojascubides10a@gmail.com"},
+    {"username": "ROJASK", "email": "sauremk30@gmail.com"},
+    {"username": "ROLON", "email": "jorgesebastianrolonmarquez@gmail.com"},
+    {"username": "VELANDIA", "email": "sovelandiap2005@gmail.com"},
+    {"username": "VERA", "email": "osmarandresvera@gmail.com"},
+    {"username": "VERGARA", "email": "geronjose20@gmail.com"},
+    {"username": "VILLAMIZAR", "email": "dani3lsu4rez@gmail.com"},
+]
 
 dosis_ejemplos = ["1 comprimido", "2 tabletas", "10 mg", "5 ml", "1 cápsula", "1 aplicación"]
 frecuencia_ejemplos = ["Cada 8 horas", "Una vez al día", "Cada 12 horas", "Antes de dormir", "Con cada comida", "Cada 6 horas", "Dos veces al día"]
@@ -165,26 +188,21 @@ def limpiar_tablas(conn):
         
         cur.execute("DELETE FROM auditoria;")
         print("  - Datos de 'auditoria' eliminados.")
+
+        cur.execute("DELETE FROM reportes_log;")
+        print("  - Datos de 'reportes_log' eliminados.")
         
         cur.execute("DELETE FROM medicamentos;")
         print("  - Datos de 'medicamentos' eliminados.")
-        
+
+        # Antes de eliminar usuarios, se debe asegurar que no haya referencias.
+        # Si 'eps_id' en 'usuarios' tiene ON DELETE SET NULL, no hay problema para eliminar usuarios antes de EPS.
         cur.execute("DELETE FROM usuarios;")
         print("  - Datos de 'usuarios' eliminados.")
         
-        # Si tienes una tabla 'reportes' y necesitas limpiarla:
-        # try:
-        #     cur.execute("DELETE FROM reportes;")
-        #     print("  - Datos de 'reportes' eliminados.")
-        # except psycopg2.ProgrammingError as pe: # Captura si la tabla no existe
-        #     if 'relation "reportes" does not exist' in str(pe):
-        #         print("  - Tabla 'reportes' no encontrada, omitiendo limpieza.")
-        #     else:
-        #         raise # Relanza otras ProgrammingError
-        # except psycopg2.Error as e:
-        #     print(f"  - Error al eliminar datos de 'reportes': {e}")
-        #     conn.rollback()
-
+        cur.execute("DELETE FROM eps;") # NUEVO: Limpiar EPS
+        print("  - Datos de 'eps' eliminados.")
+        
         conn.commit()
         print("Limpieza de tablas completada.")
     except psycopg2.Error as e:
@@ -194,16 +212,35 @@ def limpiar_tablas(conn):
     finally:
         cur.close()
 
+def insertar_eps_lote(conn, eps_a_insertar):
+    cur = conn.cursor()
+    print(f"Insertando {len(eps_a_insertar)} EPS...")
+    sql_insert_eps = """
+        INSERT INTO eps (nombre, nit)
+        VALUES (%s, %s)
+        ON CONFLICT (nombre) DO NOTHING;
+    """
+    for eps in eps_a_insertar:
+        try:
+            cur.execute(sql_insert_eps, (eps['nombre'], eps['nit']))
+        except psycopg2.Error as e:
+            print(f"Error al insertar EPS {eps['nombre']}: {e}")
+            conn.rollback()
+    conn.commit()
+    print("Inserción de EPS completada.")
+    cur.close()
+
+# Modificación: Ahora acepta 'eps_id_to_assign'
 def insertar_usuarios_lote(conn, usuarios_a_insertar):
     cur = conn.cursor()
     print(f"Intentando insertar {len(usuarios_a_insertar)} usuarios...")
-    # Ajusta la sentencia SQL para incluir los nuevos campos
+    # Ajusta la sentencia SQL para incluir los nuevos campos, incluyendo eps_id
     sql_insert_usuario = """
         INSERT INTO usuarios (
             nombre, cedula, email, contrasena, rol, estado_usuario,
-            fecha_nacimiento, telefono, ciudad, fecha_registro
+            fecha_nacimiento, telefono, ciudad, fecha_registro, eps_id
         )
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         ON CONFLICT (cedula) DO NOTHING; 
     """
     for usuario in usuarios_a_insertar:
@@ -213,10 +250,11 @@ def insertar_usuarios_lote(conn, usuarios_a_insertar):
                 (
                     usuario['nombre'], usuario['cedula'], usuario['email'], 
                     usuario['contrasena'], usuario['rol'], usuario['estado_usuario'],
-                    usuario.get('fecha_nacimiento'), # .get para manejar si algún admin no lo tiene
+                    usuario.get('fecha_nacimiento'), 
                     usuario.get('telefono'),
                     usuario.get('ciudad'),
-                    usuario.get('fecha_registro')
+                    usuario.get('fecha_registro'),
+                    usuario.get('eps_id') # NUEVO: Campo eps_id
                 )
             )
         except psycopg2.Error as e:
@@ -259,8 +297,12 @@ def insertar_alertas_lote(conn, num_alertas):
     cur.execute("SELECT id FROM medicamentos WHERE estado_medicamento = 'disponible'")
     medicamento_ids = [row[0] for row in cur.fetchall()]
 
-    if not cliente_ids or not medicamento_ids:
-        print("No hay suficientes clientes activos o medicamentos disponibles para crear alertas.")
+    cur.execute("SELECT id FROM usuarios WHERE rol = 'admin' LIMIT 1") # Obtener ID del admin para asignado_por
+    admin_row = cur.fetchone()
+    admin_id = admin_row[0] if admin_row else None # Acceder por índice ya que no es RealDictCursor
+
+    if not cliente_ids or not medicamento_ids or admin_id is None:
+        print("No hay suficientes clientes activos, medicamentos disponibles o administradores para crear alertas.")
         cur.close()
         return
 
@@ -273,41 +315,41 @@ def insertar_alertas_lote(conn, num_alertas):
             dosis = random.choice(dosis_ejemplos)
             frecuencia = random.choice(frecuencia_ejemplos)
             
-            start_date = datetime.now() + timedelta(days=random.randint(-10, 10))
-            fecha_inicio = start_date.strftime('%Y-%m-%d')
+            start_date_obj = datetime.now() + timedelta(days=random.randint(-10, 10))
+            fecha_inicio = start_date_obj.strftime('%Y-%m-%d')
             
-            fecha_fin_obj = None
+            fecha_fin_val = None
             if random.choice([True, False]): 
-                fecha_fin_obj = start_date + timedelta(days=random.randint(7, 90))
-                fecha_fin = fecha_fin_obj.strftime('%Y-%m-%d')
-            else:
-                fecha_fin = None
+                fecha_fin_obj = start_date_obj + timedelta(days=random.randint(7, 90))
+                fecha_fin_val = fecha_fin_obj.strftime('%Y-%m-%d')
             
-            hora_preferida_obj = None
+            hora_preferida_val = None
             if random.choice([True, False]): 
-                hora_preferida_obj = f"{random.randint(0,23):02d}:{random.randint(0,59):02d}:00"
+                hora_preferida_val = f"{random.randint(0,23):02d}:{random.randint(0,59):02d}:00"
             
             estado = random.choice(alert_states)
             if estado == "completada":
-                 if start_date > datetime.now(): # If start is future, make it past
-                     start_date = datetime.now() - timedelta(days=random.randint(10,20))
-                     fecha_inicio = start_date.strftime('%Y-%m-%d')
+                 # Adjust dates for 'completada' state to ensure fecha_fin is in the past and after fecha_inicio
+                 if start_date_obj.date() >= date.today(): # If start is today or future, make it past
+                     start_date_obj = datetime.now() - timedelta(days=random.randint(10,20))
+                     fecha_inicio = start_date_obj.strftime('%Y-%m-%d')
+                 
                  # Ensure end_date is after start_date but in the past
-                 fecha_fin = (start_date + timedelta(days=random.randint(1,5))).strftime('%Y-%m-%d')
-                 if datetime.strptime(fecha_fin, '%Y-%m-%d') >= datetime.now():
-                     fecha_fin = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
-                     if datetime.strptime(fecha_fin, '%Y-%m-%d') < start_date: # ensure end date is not before start date
-                        fecha_fin = (start_date + timedelta(days=1)).strftime('%Y-%m-%d')
-                        if datetime.strptime(fecha_fin, '%Y-%m-%d') >= datetime.now(): # final check
-                           fecha_fin = None # or set to start_date if it makes sense
+                 fecha_fin_obj = start_date_obj + timedelta(days=random.randint(1,5))
+                 if fecha_fin_obj.date() >= date.today():
+                     fecha_fin_obj = datetime.now() - timedelta(days=1)
+                     # Final check to ensure fecha_fin is not before fecha_inicio
+                     if fecha_fin_obj.date() < start_date_obj.date():
+                         fecha_fin_obj = start_date_obj + timedelta(days=1)
+                 fecha_fin_val = fecha_fin_obj.strftime('%Y-%m-%d')
 
 
             cur.execute(
                 """
-                INSERT INTO alertas (usuario_id, medicamento_id, dosis, frecuencia, fecha_inicio, fecha_fin, hora_preferida, estado)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s);
+                INSERT INTO alertas (usuario_id, medicamento_id, dosis, frecuencia, fecha_inicio, fecha_fin, hora_preferida, estado, asignado_por_usuario_id)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s);
                 """,
-                (usuario_id, medicamento_id, dosis, frecuencia, fecha_inicio, fecha_fin, hora_preferida_obj, estado)
+                (usuario_id, medicamento_id, dosis, frecuencia, fecha_inicio, fecha_fin_val, hora_preferida_val, estado, admin_id)
             )
             alertas_insertadas +=1
         except psycopg2.Error as e:
@@ -342,6 +384,31 @@ def main():
         print("Conexión a la base de datos establecida.")
         limpiar_tablas(conn)
 
+        # --- Insertar EPS ---
+        lista_eps_colombia = [
+            {"nombre": "Nueva EPS", "nit": "8301086054"},
+            {"nombre": "Sura EPS", "nit": "8909031357"},
+            {"nombre": "Sanitas EPS", "nit": "8605136814"},
+            {"nombre": "Compensar EPS", "nit": "8600667017"},
+            {"nombre": "Coosalud EPS", "nit": "8002047247"},
+            {"nombre": "Salud Total EPS", "nit": "8001021464"},
+            {"nombre": "Famisanar EPS", "nit": "8605330366"},
+            {"nombre": "Aliansalud EPS", "nit": "8300262108"},
+            {"nombre": "EPM Salud", "nit": "8110000632"},
+            {"nombre": "SaludMia EPS", "nit": "9009848521"}
+        ]
+        insertar_eps_lote(conn, lista_eps_colombia)
+
+        # Obtener IDs de EPS para asignarlos a los usuarios
+        cur = conn.cursor()
+        cur.execute("SELECT id FROM eps WHERE estado = 'activo'")
+        eps_ids = [row[0] for row in cur.fetchall()]
+        cur.close()
+
+        if not eps_ids:
+            print("Advertencia: No hay EPS disponibles para asignar a los clientes. Asegúrate de que las EPS se inserten primero.")
+            # Si no hay EPS, los clientes se insertarán con eps_id = NULL
+
         # --- Generar e Insertar Administradores ---
         admins_a_insertar = []
         admins_a_insertar.append({
@@ -351,30 +418,57 @@ def main():
             'contrasena': generate_password_hash("a0416g", method='pbkdf2:sha256'),
             'rol': 'admin',
             'estado_usuario': 'activo',
-            'fecha_nacimiento': None,
-            'telefono': None,
-            'ciudad': None,
-            'fecha_registro': datetime.now().strftime('%Y-%m-%d')
+            'fecha_nacimiento': generar_fecha_nacimiento_realista(25, 40), # Admin típico en este rango de edad
+            'telefono': generar_numero_telefono_colombiano(random.choice(list(ciudades_colombia.values()))), # Random city for admin
+            'ciudad': random.choice(list(ciudades_colombia.keys())),
+            'fecha_registro': datetime.now().strftime('%Y-%m-%d'),
+            'eps_id': random.choice(eps_ids) if eps_ids else None # Asignar EPS al admin también
         })
+        # Más admins aleatorios
+        for i in range(5):
+            nombre_admin = random.choice(first_names_male + first_names_female)
+            apellido_admin = random.choice(last_names)
+            cedula_admin = f"ADM{random.randint(10000, 99999)}" # Cédulas para admins pueden ser diferentes
+            email_admin = f"admin{nombre_admin.lower().replace(' ', '')}{apellido_admin.lower().replace(' ', '')}{random.randint(1,99)}@{random.choice(dominios_email)}"
+            ciudad_admin_nombre, ciudad_data_admin = random.choice(list(ciudades_colombia.items()))
+            admins_a_insertar.append({
+                'nombre': f"{nombre_admin} {apellido_admin}",
+                'cedula': cedula_admin,
+                'email': email_admin,
+                'contrasena': hashed_common_pass,
+                'rol': 'admin',
+                'estado_usuario': 'activo',
+                'fecha_nacimiento': generar_fecha_nacimiento_realista(30, 60),
+                'telefono': generar_numero_telefono_colombiano(ciudad_data_admin),
+                'ciudad': ciudad_admin_nombre,
+                'fecha_registro': (datetime.now() - timedelta(days=random.randint(0, 365))).strftime('%Y-%m-%d'),
+                'eps_id': random.choice(eps_ids) if eps_ids else None
+            })
         insertar_usuarios_lote(conn, admins_a_insertar)
 
-        # --- Generar e Insertar Clientes ---
+        # --- Generar e Insertar Clientes (adicionales a los de Oracle) ---
         clientes_a_insertar = []
-        for i in range(1, 151):
+        for i in range(1, 151): # Generar 150 clientes aleatorios
             nombre_base = random.choice(all_first_names)
             apellido1 = random.choice(last_names)
             apellido2 = random.choice(last_names)
-            nombre_cliente = f"{nombre_base} {apellido1}" if random.choice([True, False]) else f"{nombre_base} {apellido1} {apellido2}"
-            cedula_cliente = str(random.randint(10000000, 1999999999))[:10]
-            nombre_para_email = nombre_base.lower().split(" ")[0]
-            apellido_para_email = apellido1.lower()
-            separador_email = random.choice(['.', '_', ''])
-            email_cliente = f"{nombre_para_email}{separador_email}{apellido_para_email}{random.randint(1,99)}@{random.choice(dominios_email)}"
+            nombre_cliente = f"{nombre_base} {apellido1}"
+            if random.choice([True, False]): # 50% de probabilidad de tener segundo apellido
+                nombre_cliente += f" {apellido2}"
+            
+            cedula_cliente = str(random.randint(100000000, 1999999999)) # Generar número de 9 o 10 dígitos
+
+            # Asegurar email único y válido
+            email_base = nombre_base.lower().replace(' ', '')
+            email_apellido = apellido1.lower().replace(' ', '')
+            email_cliente = f"{email_base}{email_apellido}{random.randint(1,999)}@{random.choice(dominios_email)}"
+
             fecha_registro_dt = datetime.now() - timedelta(days=random.randint(0, 3*365))
             estado_cliente = random.choices(['activo', 'inactivo'], weights=[0.9, 0.1], k=1)[0]
             fecha_nacimiento_cliente = generar_fecha_nacimiento_realista()
             ciudad_nombre, ciudad_data = random.choice(list(ciudades_colombia.items()))
             telefono_cliente = generar_numero_telefono_colombiano(ciudad_data)
+            eps_id_cliente = random.choice(eps_ids) if eps_ids else None
 
             clientes_a_insertar.append({
                 'nombre': nombre_cliente,
@@ -386,9 +480,68 @@ def main():
                 'fecha_nacimiento': fecha_nacimiento_cliente.strftime('%Y-%m-%d'),
                 'telefono': telefono_cliente,
                 'ciudad': ciudad_nombre,
-                'fecha_registro': fecha_registro_dt.strftime('%Y-%m-%d')
+                'fecha_registro': fecha_registro_dt.strftime('%Y-%m-%d'),
+                'eps_id': eps_id_cliente
             })
         insertar_usuarios_lote(conn, clientes_a_insertar)
+
+        # --- Insertar Usuarios de Oracle ---
+        print(f"Insertando {len(oracle_users_data)} usuarios del archivo Oracle...")
+        oracle_clients_to_insert = []
+        for user_data in oracle_users_data:
+            username = user_data['username'].strip().title() # Apellido con primera letra mayúscula
+            email = user_data['email'].strip()
+            
+            # Intenta extraer el nombre del correo de forma más robusta
+            local_part = email.split('@')[0]
+            # Eliminar caracteres no alfabéticos y números del inicio/fin para aislar nombres/apellidos
+            clean_local_part = ''.join(filter(str.isalpha, local_part)).lower()
+            
+            first_name_inferred = ""
+            # Buscar nombres comunes en el email (heurístico)
+            for fname in all_first_names:
+                if fname.lower() in clean_local_part:
+                    # Si encontramos un nombre, lo tomamos como el primer nombre
+                    first_name_inferred = fname
+                    break
+            
+            if not first_name_inferred: # Fallback si no se pudo inferir un nombre común
+                # Intentar tomar la primera parte alfabética del email que no sea el username
+                parts = re.findall(r'[a-zA-Z]+', local_part)
+                if parts:
+                    for part in parts:
+                        if part.lower() not in username.lower(): # Si no es el username (apellido)
+                            first_name_inferred = part.title()
+                            break
+                if not first_name_inferred: # Último recurso: usar un nombre aleatorio
+                    first_name_inferred = random.choice(all_first_names)
+            
+            full_name = f"{first_name_inferred} {username}" # Nombre y luego el apellido
+            
+            # Generar cédula aleatoria para estos usuarios
+            cedula_oracle = str(random.randint(100000000, 1999999999))
+
+            fecha_registro_dt = datetime.now() - timedelta(days=random.randint(0, 3*365))
+            estado_cliente = random.choices(['activo', 'inactivo'], weights=[0.95, 0.05], k=1)[0] # Más probabilidad de activo
+            fecha_nacimiento_cliente = generar_fecha_nacimiento_realista()
+            ciudad_nombre, ciudad_data = random.choice(list(ciudades_colombia.items()))
+            telefono_cliente = generar_numero_telefono_colombiano(ciudad_data)
+            eps_id_cliente = random.choice(eps_ids) if eps_ids else None
+
+            oracle_clients_to_insert.append({
+                'nombre': full_name,
+                'cedula': cedula_oracle,
+                'email': email,
+                'contrasena': hashed_common_pass, # Usar contraseña genérica
+                'rol': 'cliente',
+                'estado_usuario': estado_cliente,
+                'fecha_nacimiento': fecha_nacimiento_cliente.strftime('%Y-%m-%d'),
+                'telefono': telefono_cliente,
+                'ciudad': ciudad_nombre,
+                'fecha_registro': fecha_registro_dt.strftime('%Y-%m-%d'),
+                'eps_id': eps_id_cliente
+            })
+        insertar_usuarios_lote(conn, oracle_clients_to_insert)
 
         # --- Insertar Medicamentos ---
         insertar_medicamentos_lote(conn, lista_medicamentos_a_insertar)
@@ -405,6 +558,9 @@ def main():
         if conn: conn.rollback()
     except Exception as e:
         print(f"\nOcurrió un error general inesperado: {e}")
+        # Asegúrate de imprimir el error completo para depuración
+        import traceback
+        traceback.print_exc() # Esto imprimirá el stack trace completo
         if conn: conn.rollback()
     finally:
         if conn:

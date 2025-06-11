@@ -35,17 +35,35 @@
                         <th>Fecha Fin</th>
                         <th>Hora Preferida</th>
                         <th>Estado</th>
-                    </tr>
+                        <th>Acciones</th> </tr>
                 </thead>
                 <tbody id="alertas-table-body">
-                    </tbody>
+                </tbody>
             </table>
         </div>
     </main>
 
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-<script src="{{ url_for('static', filename='js/theme.js') }}"></script> 
-<script src="{{ url_for('static', filename='js/client.js') }}"></script>
+<div class="modal fade" id="notificationModal" tabindex="-1" aria-labelledby="notificationModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+        <div class="modal-header" id="notificationModalHeader">
+            <h5 class="modal-title" id="notificationModalLabel">Notificación</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body" id="notificationModalBody">
+            </div>
+        <div class="modal-footer">
+            <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Cerrar</button>
+        </div>
+        </div>
+    </div>
+</div>
 
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<script src="{{ url_for('static', filename='js/theme.js') }}"></script> 
+<script src="{{ url_for('static', filename='js/shared-utils.js') }}"></script>
+<script src="{{ url_for('static', filename='js/report-generator.js') }}"></script> <script src="{{ url_for('static', filename='js/client.js') }}"></script>
 </body>
 </html>

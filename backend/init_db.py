@@ -1,6 +1,8 @@
 # backend/init_db.py
 import psycopg2
 import os
+import random # Importar random para la selección aleatoria de EPS
+from datetime import date, datetime, timedelta # Importar date
 
 # --- Configuración de la Conexión a la Base de Datos ---
 PG_HOST = os.getenv('PG_HOST', 'localhost')
@@ -12,8 +14,8 @@ PG_PORT = os.getenv('PG_PORT', '5432')
 # --- Comandos SQL para crear la estructura de la base de datos ---
 SQL_COMMANDS = """
 -- Borra las tablas y secuencias existentes para empezar de cero
-DROP TABLE IF EXISTS reportes, alertas, medicamentos, usuarios, auditoria, reportes_log CASCADE;
-DROP SEQUENCE IF EXISTS usuarios_id_seq, medicamentos_id_seq, alertas_id_seq, auditoria_id_seq, reportes_log_id_seq;
+DROP TABLE IF EXISTS reportes, alertas, medicamentos, usuarios, auditoria, reportes_log, eps CASCADE; /* MODIFICADO: Añadido eps */
+DROP SEQUENCE IF EXISTS usuarios_id_seq, medicamentos_id_seq, alertas_id_seq, auditoria_id_seq, reportes_log_id_seq, eps_id_seq; /* MODIFICADO: Añadido eps_id_seq */
 
 --------------------------------------------------------------------------------
 -- SECCIÓN: SECUENCIAS
@@ -24,10 +26,26 @@ CREATE SEQUENCE medicamentos_id_seq START WITH 1 INCREMENT BY 1;
 CREATE SEQUENCE alertas_id_seq START WITH 1 INCREMENT BY 1;
 CREATE SEQUENCE auditoria_id_seq START WITH 1 INCREMENT BY 1;
 CREATE SEQUENCE reportes_log_id_seq START WITH 1 INCREMENT BY 1;
+CREATE SEQUENCE eps_id_seq START WITH 1 INCREMENT BY 1; /* NUEVO */
 
 --------------------------------------------------------------------------------
 -- SECCIÓN: TABLAS
 --------------------------------------------------------------------------------
+
+-- Tabla: eps
+-- Descripción: Listado de Entidades Promotoras de Salud (EPS) colombianas.
+CREATE TABLE eps ( /* NUEVO */
+    id INTEGER PRIMARY KEY DEFAULT nextval('eps_id_seq'),
+    nombre VARCHAR(100) UNIQUE NOT NULL,
+    nit VARCHAR(20) UNIQUE,
+    estado VARCHAR(10) DEFAULT 'activo' NOT NULL CHECK (estado IN ('activo', 'inactivo'))
+);
+COMMENT ON TABLE eps IS 'Listado de Entidades Promotoras de Salud (EPS) colombianas.';
+COMMENT ON COLUMN eps.id IS 'Identificador único de la EPS (autonumérico).';
+COMMENT ON COLUMN eps.nombre IS 'Nombre de la EPS.';
+COMMENT ON COLUMN eps.nit IS 'Número de Identificación Tributaria de la EPS.';
+COMMENT ON COLUMN eps.estado IS 'Estado de la EPS (activo o inactivo).';
+
 
 -- Tabla: usuarios
 -- Descripción: Almacena la información de los usuarios del sistema.
@@ -42,7 +60,9 @@ CREATE TABLE usuarios (
     fecha_nacimiento DATE,          -- NUEVO CAMPO
     telefono VARCHAR(20),           -- NUEVO CAMPO
     ciudad VARCHAR(100),            -- NUEVO CAMPO (o localidad si prefieres ese nombre)
-    fecha_registro DATE DEFAULT CURRENT_DATE -- NUEVO CAMPO (con valor por defecto)
+    fecha_registro DATE DEFAULT CURRENT_DATE, -- NUEVO CAMPO (con valor por defecto)
+    eps_id INTEGER, /* NUEVO */
+    CONSTRAINT fk_usuarios_eps FOREIGN KEY (eps_id) REFERENCES eps(id) ON DELETE SET NULL /* NUEVO */
 );
 COMMENT ON TABLE usuarios IS 'Almacena la información de los usuarios del sistema, incluyendo administradores y clientes.';
 COMMENT ON COLUMN usuarios.id IS 'Identificador único del usuario (autonumérico).';
@@ -53,6 +73,7 @@ COMMENT ON COLUMN usuarios.fecha_nacimiento IS 'Fecha de nacimiento del usuario.
 COMMENT ON COLUMN usuarios.telefono IS 'Número de teléfono del usuario.';
 COMMENT ON COLUMN usuarios.ciudad IS 'Ciudad de residencia del usuario.';
 COMMENT ON COLUMN usuarios.fecha_registro IS 'Fecha en que el usuario fue registrado en el sistema.';
+COMMENT ON COLUMN usuarios.eps_id IS 'Referencia a la EPS a la que pertenece el usuario.'; /* NUEVO */
 
 
 -- Tabla: medicamentos
@@ -86,8 +107,10 @@ CREATE TABLE alertas (
     hora_preferida TIME,            -- Hora específica para la notificación (opcional)
     ultima_notificacion_enviada TIMESTAMP WITH TIME ZONE, -- Para control de envío de notificaciones
     estado VARCHAR(20) DEFAULT 'activa' NOT NULL CHECK (estado IN ('activa', 'inactiva', 'completada', 'fallida')), -- 'fallida' si no se pudo notificar
+    asignado_por_usuario_id INTEGER, /* NUEVO */
     CONSTRAINT fk_alertas_usuario FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE NO ACTION,
-    CONSTRAINT fk_alertas_medicamento FOREIGN KEY (medicamento_id) REFERENCES medicamentos(id) ON DELETE NO ACTION
+    CONSTRAINT fk_alertas_medicamento FOREIGN KEY (medicamento_id) REFERENCES medicamentos(id) ON DELETE NO ACTION,
+    CONSTRAINT fk_alertas_asignador FOREIGN KEY (asignado_por_usuario_id) REFERENCES usuarios(id) ON DELETE SET NULL /* NUEVO */
 );
 COMMENT ON TABLE alertas IS 'Registra las alertas de medicamentos programadas para cada usuario cliente.';
 COMMENT ON COLUMN alertas.id IS 'Identificador único de la alerta (autonumérico).';
@@ -96,6 +119,7 @@ COMMENT ON COLUMN alertas.medicamento_id IS 'Referencia al medicamento de la ale
 COMMENT ON COLUMN alertas.estado IS 'Estado actual de la alerta (activa, inactiva por usuario/medicamento, completada, fallida).';
 COMMENT ON COLUMN alertas.hora_preferida IS 'Hora específica del día en que el usuario prefiere recibir la notificación para esta alerta.';
 COMMENT ON COLUMN alertas.ultima_notificacion_enviada IS 'Timestamp de la última vez que se intentó enviar una notificación para esta alerta.';
+COMMENT ON COLUMN alertas.asignado_por_usuario_id IS 'ID del usuario (administrador) que asignó o modificó la alerta.'; /* NUEVO */
 
 
 -- Tabla: auditoria
@@ -346,6 +370,19 @@ EXECUTE FUNCTION func_desactivar_alertas_medicamento_discontinuado();
 --------------------------------------------------------------------------------
 -- SECCIÓN: DATOS INICIALES (PARA PRUEBAS)
 --------------------------------------------------------------------------------
+
+-- Datos iniciales de EPS
+INSERT INTO eps (nombre, nit, estado) VALUES
+('Nueva EPS', '8301086054', 'activo'),
+('Sura EPS', '8909031357', 'activo'),
+('Sanitas EPS', '8605136814', 'activo'),
+('Compensar EPS', '8600667017', 'activo'),
+('Coosalud EPS', '8002047247', 'activo'),
+('Salud Total EPS', '8001021464', 'activo'),
+('Famisanar EPS', '8605330366', 'activo')
+ON CONFLICT (nombre) DO NOTHING;
+
+
 INSERT INTO usuarios (nombre, cedula, email, contrasena, rol, estado_usuario) VALUES
 ('Administrador Principal', 'admin001', 'admin@medialert.co', 'hash_contrasena_admin', 'admin', 'activo'),
 ('Cliente Activo Ejemplo', 'user001', 'cliente1@example.com', 'hash_contrasena_cliente1', 'cliente', 'activo'),
@@ -366,26 +403,28 @@ DECLARE
     v_usuario_a_inactivar_id INTEGER;
     v_medicamento_analgex_id INTEGER;
     v_medicamento_cardio_id INTEGER;
+    v_admin_id INTEGER; /* NUEVO: Para la firma */
 BEGIN
     SELECT id INTO v_usuario_activo_id FROM usuarios WHERE cedula = 'user001';
     SELECT id INTO v_usuario_a_inactivar_id FROM usuarios WHERE cedula = 'user002';
     SELECT id INTO v_medicamento_analgex_id FROM medicamentos WHERE nombre = 'Analgex 500mg';
     SELECT id INTO v_medicamento_cardio_id FROM medicamentos WHERE nombre = 'CardioVital 10mg';
+    SELECT id INTO v_admin_id FROM usuarios WHERE rol = 'admin' LIMIT 1; /* NUEVO: Obtener un admin ID */
 
-    IF v_usuario_activo_id IS NOT NULL AND v_medicamento_analgex_id IS NOT NULL THEN
-        INSERT INTO alertas (usuario_id, medicamento_id, dosis, frecuencia, fecha_inicio, hora_preferida, estado) VALUES
-        (v_usuario_activo_id, v_medicamento_analgex_id, '1 comprimido', 'Cada 8 horas', CURRENT_DATE + INTERVAL '1 day', '08:00:00', 'activa')
+    IF v_usuario_activo_id IS NOT NULL AND v_medicamento_analgex_id IS NOT NULL AND v_admin_id IS NOT NULL THEN
+        INSERT INTO alertas (usuario_id, medicamento_id, dosis, frecuencia, fecha_inicio, hora_preferida, estado, asignado_por_usuario_id) VALUES /* MODIFICADO */
+        (v_usuario_activo_id, v_medicamento_analgex_id, '1 comprimido', 'Cada 8 horas', CURRENT_DATE + INTERVAL '1 day', '08:00:00', 'activa', v_admin_id) /* MODIFICADO */
         ON CONFLICT DO NOTHING;
     END IF;
 
-    IF v_usuario_a_inactivar_id IS NOT NULL AND v_medicamento_cardio_id IS NOT NULL THEN
-        INSERT INTO alertas (usuario_id, medicamento_id, dosis, frecuencia, fecha_inicio, hora_preferida, estado) VALUES
-        (v_usuario_a_inactivar_id, v_medicamento_cardio_id, '1 tableta', 'Cada 12 horas', CURRENT_DATE + INTERVAL '1 day', '09:00:00', 'activa')
+    IF v_usuario_a_inactivar_id IS NOT NULL AND v_medicamento_cardio_id IS NOT NULL AND v_admin_id IS NOT NULL THEN
+        INSERT INTO alertas (usuario_id, medicamento_id, dosis, frecuencia, fecha_inicio, hora_preferida, estado, asignado_por_usuario_id) VALUES /* MODIFICADO */
+        (v_usuario_a_inactivar_id, v_medicamento_cardio_id, '1 tableta', 'Cada 12 horas', CURRENT_DATE + INTERVAL '1 day', '09:00:00', 'activa', v_admin_id) /* MODIFICADO */
         ON CONFLICT DO NOTHING;
     END IF;
-     IF v_usuario_a_inactivar_id IS NOT NULL AND v_medicamento_analgex_id IS NOT NULL THEN
-        INSERT INTO alertas (usuario_id, medicamento_id, dosis, frecuencia, fecha_inicio, hora_preferida, estado) VALUES
-        (v_usuario_a_inactivar_id, v_medicamento_analgex_id, '2 tabletas', 'Cada 24 horas', CURRENT_DATE + INTERVAL '1 day', '21:00:00', 'activa')
+     IF v_usuario_a_inactivar_id IS NOT NULL AND v_medicamento_analgex_id IS NOT NULL AND v_admin_id IS NOT NULL THEN
+        INSERT INTO alertas (usuario_id, medicamento_id, dosis, frecuencia, fecha_inicio, hora_preferida, estado, asignado_por_usuario_id) VALUES /* MODIFICADO */
+        (v_usuario_a_inactivar_id, v_medicamento_analgex_id, '2 tabletas', 'Cada 24 horas', CURRENT_DATE + INTERVAL '1 day', '21:00:00', 'activa', v_admin_id) /* MODIFICADO */
         ON CONFLICT DO NOTHING;
     END IF;
 END $$;
@@ -467,6 +506,16 @@ lista_medicamentos = [
     {"nombre": "Fenacetina Pura", "descripcion": "Analgésico antiguo, retirado del mercado.", "composicion": "Fenacetina", "sintomas_secundarios": "Nefropatía, carcinogenicidad", "indicaciones": "Ya no se usa", "rango_edad": "N/A", "estado_medicamento": "discontinuado"},
 ]
 
+# Lista de EPS comunes en Colombia, para la inserción inicial
+lista_eps_a_insertar = [
+    {"nombre": "Nueva EPS", "nit": "8301086054"},
+    {"nombre": "Sura EPS", "nit": "8909031357"},
+    {"nombre": "Sanitas EPS", "nit": "8605136814"},
+    {"nombre": "Compensar EPS", "nit": "8600667017"},
+    {"nombre": "Coosalud EPS", "nit": "8002047247"},
+    {"nombre": "Salud Total EPS", "nit": "8001021464"},
+    {"nombre": "Famisanar EPS", "nit": "8605330366"},
+]
 
 def inicializar_db():
     conn = None
@@ -543,4 +592,3 @@ if __name__ == '__main__':
     print("Iniciando el script de inicialización de la base de datos MediAlert...")
     inicializar_db()
     print("Proceso de inicialización de la base de datos finalizado.")
-

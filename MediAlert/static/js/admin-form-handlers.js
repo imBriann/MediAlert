@@ -14,7 +14,7 @@ async function handleFormSubmit(url, method, body, successCallback, modalToHide,
         if (modalToHide) modalToHide.hide();
         if (successCallback) successCallback();
 
-        // Use global notification modal for success
+        // Use global notification modal
         showGlobalNotification(`${entityName} Guardado`, responseData.message || `${entityName} guardado con éxito.`, 'success');
     } catch (error) {
         console.error(`Error en handle${entityName}Submit:`, error);
@@ -33,6 +33,7 @@ async function handleClienteSubmit(e) {
     const fechaNacimientoValue = document.getElementById('clienteFechaNacimiento').value;
     const telefonoValue = document.getElementById('clienteTelefono').value;
     const ciudadValue = document.getElementById('clienteCiudad').value;
+    const epsIdValue = document.getElementById('clienteEps').value; // NUEVO
 
     const body = {
         nombre: document.getElementById('clienteNombre').value,
@@ -42,7 +43,8 @@ async function handleClienteSubmit(e) {
         // Nuevos campos
         fecha_nacimiento: fechaNacimientoValue ? fechaNacimientoValue : null, // Enviar null si está vacío
         telefono: telefonoValue ? telefonoValue : null, // Enviar null si está vacío
-        ciudad: ciudadValue ? ciudadValue : null // Enviar null si está vacío
+        ciudad: ciudadValue ? ciudadValue : null, // Enviar null si está vacío
+        eps_id: epsIdValue ? parseInt(epsIdValue, 10) : null // NUEVO: Convertir a entero o null
     };
 
     const contrasena = document.getElementById('clienteContrasena').value;

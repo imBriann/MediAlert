@@ -36,6 +36,10 @@ async function openClienteModal(id = null) {
     const telefonoInput = document.getElementById('clienteTelefono');
     const ciudadInput = document.getElementById('clienteCiudad');
     const fechaNacimientoInput = document.getElementById('clienteFechaNacimiento');
+    const epsSelect = document.getElementById('clienteEps'); // NUEVO
+
+    // Poblar dropdown de EPS
+    await populateSelect(epsSelect, '/api/eps', 'id', ['nombre'], 'Seleccione una EPS...', 'No se pudieron cargar las EPS.');
 
     if (id) { // Modo Editar
         modalTitle.textContent = 'Editar Cliente';
@@ -58,6 +62,7 @@ async function openClienteModal(id = null) {
             ciudadInput.value = cliente.ciudad || '';
             // Asegurarse de que la fecha_nacimiento esté en formato YYYY-MM-DD para el input date
             fechaNacimientoInput.value = cliente.fecha_nacimiento ? cliente.fecha_nacimiento.split('T')[0] : '';
+            epsSelect.value = cliente.eps_id || ''; // Seleccionar la EPS del cliente si existe
 
 
             contrasenaLabel.innerHTML = 'Nueva Contraseña (Opcional)';
@@ -79,6 +84,7 @@ async function openClienteModal(id = null) {
         telefonoInput.value = '';
         ciudadInput.value = '';
         fechaNacimientoInput.value = '';
+        epsSelect.value = ''; // Resetear selección de EPS
 
         contrasenaLabel.innerHTML = 'Contraseña <span class="text-danger">*</span>';
         contrasenaInput.required = true;
@@ -111,7 +117,7 @@ async function openClientDetailModal(clientId) {
     }
 
     clientDetailContent.innerHTML = '<div class="text-center p-3"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Cargando...</span></div><p>Cargando detalles del cliente...</p></div>';
-    clientAlertsTableBody.innerHTML = '<tr><td colspan="7" class="text-center"><div class="spinner-border spinner-border-sm" role="status"></div> Cargando alertas...</td></tr>';
+    clientAlertsTableBody.innerHTML = '<tr><td colspan="8" class="text-center"><div class="spinner-border spinner-border-sm" role="status"></div> Cargando alertas...</td></tr>'; // COLSPAN AJUSTADO
     modalLabel.textContent = 'Detalles del Cliente';
 
     try {
@@ -131,7 +137,7 @@ async function openClientDetailModal(clientId) {
                 <dt class="col-sm-3">Email:</dt><dd class="col-sm-9">${client.email || 'N/A'}</dd>
                 <dt class="col-sm-3">Teléfono:</dt><dd class="col-sm-9">${client.telefono || 'N/A'}</dd>
                 <dt class="col-sm-3">Ciudad:</dt><dd class="col-sm-9">${client.ciudad || 'N/A'}</dd>
-                <dt class="col-sm-3">Fec. Nacimiento:</dt><dd class="col-sm-9">${formatDate(client.fecha_nacimiento)}</dd>
+                <dt class="col-sm-3">EPS:</dt><dd class="col-sm-9">${client.eps_nombre || 'N/A'}</dd> <dt class="col-sm-3">Fec. Nacimiento:</dt><dd class="col-sm-9">${formatDate(client.fecha_nacimiento)}</dd>
                 <dt class="col-sm-3">Fec. Registro:</dt><dd class="col-sm-9">${formatDate(client.fecha_registro)}</dd>
                 <dt class="col-sm-3">Estado:</dt><dd class="col-sm-9"><span class="badge ${client.estado_usuario === 'activo' ? 'bg-success' : 'bg-danger'}">${client.estado_usuario || 'N/A'}</span></dd>
                 <dt class="col-sm-3">Rol:</dt><dd class="col-sm-9">${client.rol || 'N/A'}</dd>
@@ -148,13 +154,20 @@ async function openClientDetailModal(clientId) {
 
         clientAlertsTableBody.innerHTML = '';
         if (clientAlertas.length === 0) {
-            clientAlertsTableBody.innerHTML = '<tr><td colspan="7" class="text-center fst-italic">Este cliente no tiene alertas asignadas.</td></tr>';
+            clientAlertsTableBody.innerHTML = '<tr><td colspan="8" class="text-center fst-italic">Este cliente no tiene alertas asignadas.</td></tr>'; // COLSPAN AJUSTADO
         } else {
             clientAlertas.forEach(a => {
                 const estadoAlertBadgeClass = a.estado_alerta === 'activa' ? 'bg-success' :
                                        a.estado_alerta === 'completada' ? 'bg-info text-dark' : /* Ensure text is visible on info */
                                        a.estado_alerta === 'inactiva' ? 'bg-warning text-dark' : /* Ensure text is visible on warning */
                                        a.estado_alerta === 'fallida' ? 'bg-danger' : 'bg-secondary';
+                
+                // Botón de imprimir receta solo si la alerta no está 'fallida'
+                const printButtonHtml = (a.estado_alerta !== 'fallida') ? 
+                                        `<button class="btn btn-sm btn-outline-secondary ms-2 btn-print-receta" data-alerta-id="${a.id}" title="Imprimir Receta Médica">
+                                            <i class="bi bi-printer"></i> Receta
+                                        </button>` : '';
+
                 clientAlertsTableBody.innerHTML += `
                     <tr>
                         <td>${a.medicamento_nombre || 'N/A'}</td>
@@ -164,7 +177,7 @@ async function openClientDetailModal(clientId) {
                         <td>${formatDate(a.fecha_fin)}</td>
                         <td>${formatTime(a.hora_preferida)}</td>
                         <td><span class="badge ${estadoAlertBadgeClass}">${a.estado_alerta || 'N/A'}</span></td>
-                    </tr>`;
+                        <td>${printButtonHtml}</td> </tr>`;
             });
         }
         if (window.clientDetailModalInstance) window.clientDetailModalInstance.show();
@@ -173,7 +186,7 @@ async function openClientDetailModal(clientId) {
         console.error('Error en openClientDetailModal:', error);
         modalLabel.textContent = 'Error al Cargar Detalles';
         clientDetailContent.innerHTML = `<div class="alert alert-danger">No se pudieron cargar los detalles del cliente: ${error.message}</div>`;
-        clientAlertsTableBody.innerHTML = `<tr><td colspan="7" class="text-center text-danger">Error al cargar alertas.</td></tr>`;
+        clientAlertsTableBody.innerHTML = `<tr><td colspan="8" class="text-center text-danger">Error al cargar alertas.</td></tr>`; // COLSPAN AJUSTADO
         if (window.clientDetailModalInstance) window.clientDetailModalInstance.show();
     }
 }
@@ -225,7 +238,7 @@ async function populateSelect(selectElement, apiUrl, valueField, textFieldParts,
         if (!response.ok) throw new Error(errorMessage);
         const items = await response.json();
         items.forEach(item => {
-            const text = textFieldParts.map(part => item[part]).join(' - ');
+            const text = textFieldParts.map(part => item[part]).filter(Boolean).join(' - '); // Filter out null/undefined
             const option = new Option(text, item[valueField]);
             selectElement.add(option);
         });
@@ -245,7 +258,7 @@ async function openAlertaModal(alertaId = null) {
     const estadoSelect = document.getElementById('alertaEstado');
 
     // Populate dropdowns
-    await populateSelect(usuarioSelect, '/api/admin/clientes?estado=activo', 'id', ['nombre', 'cedula'], 'Seleccione un cliente activo...', 'No se pudieron cargar los clientes.');
+    await populateSelect(usuarioSelect, '/api/admin/clientes?estado=activo&rol=cliente', 'id', ['nombre', 'cedula'], 'Seleccione un cliente activo...', 'No se pudieron cargar los clientes.');
     await populateSelect(medicamentoSelect, '/api/admin/medicamentos?estado=disponible', 'id', ['nombre'], 'Seleccione un medicamento disponible...', 'No se pudieron cargar los medicamentos.');
 
     if (alertaId) {
