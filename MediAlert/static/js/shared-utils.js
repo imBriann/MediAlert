@@ -183,11 +183,36 @@ function getFriendlyTableName(tableName) {
         case 'alertas': return 'Alertas';
         case 'auditoria': return 'Auditoría'; 
         case 'reportes_log': return 'Log de Reportes';
+        case 'eps': return 'EPS'; // Added EPS
         default: 
             if (tableName.includes('_SESION') || tableName.includes('_LOGIN')) return 'Sesión';
             return tableName.charAt(0).toUpperCase() + tableName.slice(1);
     }
 }
+
+/**
+ * Safely converts input to a JavaScript object, handling strings (JSON) and nulls.
+ * @param {*} data The input data (can be object, string, null, undefined).
+ * @returns {object} A parsed object or an empty object if parsing fails or input is null/undefined.
+ */
+function safeParseJsonObject(data) {
+    if (data === null || typeof data === 'undefined') {
+        return {};
+    }
+    if (typeof data === 'string') {
+        try {
+            return JSON.parse(data);
+        } catch (e) {
+            console.warn("safeParseJsonObject: Could not parse string as JSON, returning empty object:", data, e);
+            return {}; // Return empty object on parse error
+        }
+    }
+    if (typeof data === 'object') {
+        return data; // Already an object
+    }
+    return {}; // Fallback for other unexpected types
+}
+
 
 /**
  * Generates a summary of changes between two JSONB objects for audit logs.
@@ -197,21 +222,20 @@ function getFriendlyTableName(tableName) {
  * @returns {string} An HTML string summarizing the changes.
  */
 function generateChangeSummary(accion, datosAnteriores, datosNuevos) {
-    let pDatosAnteriores = datosAnteriores, pDatosNuevos = datosNuevos;
-    if (typeof datosAnteriores === 'string') {
-        try { pDatosAnteriores = JSON.parse(datosAnteriores); } catch (e) { /* ignore */ }
-    }
-    if (typeof datosNuevos === 'string') {
-        try { pDatosNuevos = JSON.parse(datosNuevos); } catch (e) { /* ignore */ }
-    }
+    // CRITICAL FIX: Ensure inputs are always objects, regardless of initial type (string, null, object)
+    const pDatosAnteriores = safeParseJsonObject(datosAnteriores);
+    const pDatosNuevos = safeParseJsonObject(datosNuevos);
+
 
     let summary = '<ul class="list-unstyled mb-0 small">';
     let changesFound = false;
-    const excludedKeys = ['contrasena', 'hashed_password', 'contrasena_nueva', 'updated_at', 'created_at', 'last_login', 'usuario_id_app'];
+    const excludedKeys = ['contrasena', 'hashed_password', 'contrasena_nueva', 'updated_at', 'created_at', 'last_login', 'usuario_id_app', 'usuario_db'];
 
-    if (accion && (accion.toUpperCase().includes('CREACI') || accion.toUpperCase().includes('INSERT') || accion.toUpperCase().includes('NUEVO'))) {
+    const actionUpper = (accion || '').toUpperCase();
+
+    if (actionUpper.includes('CREACI') || actionUpper.includes('INSERT') || actionUpper.includes('NUEVO')) {
         summary += '<li><strong>Registro Creado:</strong></li>';
-        if (pDatosNuevos && typeof pDatosNuevos === 'object') {
+        if (Object.keys(pDatosNuevos).length > 0) {
             for (const key in pDatosNuevos) {
                 if (pDatosNuevos.hasOwnProperty(key) && !excludedKeys.includes(key.toLowerCase())) {
                     summary += `<li><strong>${key}:</strong> ${formatAuditValue(pDatosNuevos[key])}</li>`;
@@ -219,9 +243,9 @@ function generateChangeSummary(accion, datosAnteriores, datosNuevos) {
                 }
             }
         }
-    } else if (accion && (accion.toUpperCase().includes('ELIMINA') || accion.toUpperCase().includes('DELETE') || accion.toUpperCase().includes('BORRADO'))) {
+    } else if (actionUpper.includes('ELIMINA') || actionUpper.includes('DELETE') || actionUpper.includes('BORRADO')) {
         summary += '<li><strong>Registro Eliminado. Datos Anteriores:</strong></li>';
-        if (pDatosAnteriores && typeof pDatosAnteriores === 'object') {
+        if (Object.keys(pDatosAnteriores).length > 0) {
              for (const key in pDatosAnteriores) {
                 if (pDatosAnteriores.hasOwnProperty(key) && !excludedKeys.includes(key.toLowerCase())) {
                     summary += `<li><strong>${key}:</strong> ${formatAuditValue(pDatosAnteriores[key])}</li>`;
@@ -229,7 +253,7 @@ function generateChangeSummary(accion, datosAnteriores, datosNuevos) {
                 }
             }
         }
-    } else if (pDatosNuevos && typeof pDatosNuevos === 'object' && pDatosAnteriores && typeof pDatosAnteriores === 'object') {
+    } else if (Object.keys(pDatosNuevos).length > 0 || Object.keys(pDatosAnteriores).length > 0) { // For 'UPDATE' or other changes
         summary += '<li><strong>Cambios Detectados:</strong></li>';
         const allKeys = new Set([...Object.keys(pDatosAnteriores), ...Object.keys(pDatosNuevos)]);
         allKeys.forEach(key => {
@@ -238,6 +262,8 @@ function generateChangeSummary(accion, datosAnteriores, datosNuevos) {
             const oldValue = pDatosAnteriores[key];
             const newValue = pDatosNuevos[key];
 
+            // Compare as JSON strings to handle objects/arrays within values, safer than direct comparison
+            // Also stringify null/undefined to 'null' or 'undefined' for consistent comparison
             if (JSON.stringify(oldValue) !== JSON.stringify(newValue)) {
                 summary += `<li><strong>${key}:</strong> 
                             <span class="text-danger" style="text-decoration: line-through;">${formatAuditValue(oldValue)}</span> &rarr; 
@@ -245,21 +271,17 @@ function generateChangeSummary(accion, datosAnteriores, datosNuevos) {
                 changesFound = true;
             }
         });
-    } else if (pDatosNuevos && typeof pDatosNuevos === 'object') { 
-        summary += '<li><strong>Datos Actualizados:</strong></li>';
-        for (const key in pDatosNuevos) {
-            if (pDatosNuevos.hasOwnProperty(key) && !excludedKeys.includes(key.toLowerCase())) {
-                summary += `<li><strong>${key}:</strong> ${formatAuditValue(pDatosNuevos[key])}</li>`;
-                changesFound = true;
-            }
-        }
     }
 
     if (!changesFound) {
-        if (accion && (accion.toUpperCase().includes('SESION') || accion.toUpperCase().includes('LOGIN'))) {
+        if (actionUpper.includes('SESION') || actionUpper.includes('LOGIN')) {
              summary += `<li><small>Evento de ${accion.toLowerCase().replace(/_/g, ' ')}.</small></li>`;
-        } else {
-            summary += '<li><small>No se detectaron cambios de datos o son eventos generales.</small></li>';
+        } else if (actionUpper.includes('PREVENIDO')) {
+            summary += `<li><small>Intento de acción prevenido: ${accion.toLowerCase().replace(/_/g, ' ')}.</small></li>`;
+        }
+        else {
+            // Default message if no specific changes are found or it's a general event without detailed changes
+            summary += '<li><small>No se detectaron cambios de datos detallados o es un evento general.</small></li>';
         }
     }
     summary += '</ul>';
@@ -272,19 +294,18 @@ function generateChangeSummary(accion, datosAnteriores, datosNuevos) {
  * @returns {string} An HTML string representation of the JSON data.
  */
 function formatJsonForDisplay(jsonData) { 
-    if (jsonData === null || typeof jsonData === 'undefined') return 'N/A';
-    if (typeof jsonData === 'string') {
-        try { jsonData = JSON.parse(jsonData); } catch (e) { return `<small>${jsonData}</small>`; }
-    }
-    if (typeof jsonData === 'object') {
+    // CRITICAL FIX: Use safeParseJsonObject here too
+    const pJsonData = safeParseJsonObject(jsonData);
+
+    if (Object.keys(pJsonData).length > 0) {
         let content = '<ul class="list-unstyled mb-0 small">';
-        for(const [key, value] of Object.entries(jsonData)) {
+        for(const [key, value] of Object.entries(pJsonData)) {
             content += `<li><strong>${key}:</strong> ${formatAuditValue(value)}</li>`;
         }
         content += '</ul>';
         return content;
     }
-    return `<small>${String(jsonData)}</small>`;
+    return 'N/A'; // If it's an empty object or not a valid type/string after parsing
 }
 
 /**
@@ -309,7 +330,24 @@ function formatAuditValue(value) {
         }
     }
     
-    if (typeof value === 'object') return `<pre class="mb-0 small">${JSON.stringify(value, null, 2)}</pre>`;
+    // If it's an object (but not null/undefined), stringify it for display
+    if (typeof value === 'object') {
+        try {
+            // Handle specific simple objects like those from JSONB (e.g., {'usuario_inactivado_id': 123})
+            // If it's a complex object, stringify it
+            if (Object.keys(value).length === 0) { // Empty object
+                return 'N/A';
+            }
+            // Heuristic: if it's a simple flat object, list key:value
+            const simpleObjectKeys = Object.keys(value);
+            if (simpleObjectKeys.length < 4 && simpleObjectKeys.every(k => typeof value[k] !== 'object')) {
+                return `<small>${Object.entries(value).map(([k,v]) => `${k}:${String(v).substring(0,20)}`).join('; ')}</small>`;
+            }
+            return `<pre class="mb-0 small">${JSON.stringify(value, null, 2)}</pre>`;
+        } catch (e) {
+            return String(value); // Fallback to simple string conversion
+        }
+    }
     return value.toString();
 }
 

@@ -21,9 +21,15 @@
             </div>
         </div>
     </nav>
-    
+
     <main class="container mt-4">
-        <h2>Mis Alertas de Medicamentos Activas</h2>
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h2>Mis Alertas de Medicamentos</h2>
+            <button class="btn btn-success" id="btn-report-consolidado" title="Descargar Receta Consolidada de Medicamentos Activos">
+                <i class="bi bi-file-earmark-medical"></i> Receta Consolidada Activa
+            </button>
+        </div>
+
         <div class="table-responsive">
             <table class="table table-striped table-hover">
                 <thead>
@@ -62,8 +68,9 @@
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
-<script src="{{ url_for('static', filename='js/theme.js') }}"></script> 
+<script src="{{ url_for('static', filename='js/theme.js') }}"></script>
 <script src="{{ url_for('static', filename='js/shared-utils.js') }}"></script>
-<script src="{{ url_for('static', filename='js/report-generator.js') }}"></script> <script src="{{ url_for('static', filename='js/client.js') }}"></script>
+<script src="{{ url_for('static', filename='js/report-generator.js') }}"></script>
+<script src="{{ url_for('static', filename='js/client.js') }}"></script>
 </body>
 </html>

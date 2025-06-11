@@ -16,7 +16,7 @@ function showView(viewId) {
         case 'view-medicamentos': if(typeof loadMedicamentos === 'function') loadMedicamentos(); break;
         case 'view-alertas': if(typeof loadAlertas === 'function') loadAlertas(); break;
         case 'view-auditoria': if(typeof loadAuditoria === 'function') loadAuditoria(); break;
-        case 'view-reportes': if(typeof loadReportesLog === 'function') loadReportesLog(); break; 
+        case 'view-reportes': if(typeof loadReportesLog === 'function') loadReportesLog(); break;
     }
 }
 
@@ -28,22 +28,21 @@ async function openClienteModal(id = null) {
     const contrasenaInput = document.getElementById('clienteContrasena');
     const contrasenaLabel = document.getElementById('clienteContrasenaLabel');
     const contrasenaHelp = document.getElementById('clienteContrasenaHelp');
-    
+
     const estadoUsuarioSelect = document.getElementById('clienteEstadoUsuario');
-    const estadoUsuarioDiv = document.getElementById('clienteEstadoUsuarioDiv'); 
-    
-    // Referencias a los nuevos campos
+    const estadoUsuarioDiv = document.getElementById('clienteEstadoUsuarioDiv');
+
     const telefonoInput = document.getElementById('clienteTelefono');
     const ciudadInput = document.getElementById('clienteCiudad');
     const fechaNacimientoInput = document.getElementById('clienteFechaNacimiento');
-    const epsSelect = document.getElementById('clienteEps'); // NUEVO
+    const epsSelect = document.getElementById('clienteEps');
 
-    // Poblar dropdown de EPS
-    await populateSelect(epsSelect, '/api/eps', 'id', ['nombre'], 'Seleccione una EPS...', 'No se pudieron cargar las EPS.');
+    // FIX: Change API URL from '/api/eps' to '/api/admin/eps'
+    await populateSelect(epsSelect, '/api/admin/eps', 'id', ['nombre'], 'Seleccione una EPS...', 'No se pudieron cargar las EPS.');
 
     if (id) { // Modo Editar
         modalTitle.textContent = 'Editar Cliente';
-        if(estadoUsuarioDiv) estadoUsuarioDiv.style.display = 'block'; 
+        if(estadoUsuarioDiv) estadoUsuarioDiv.style.display = 'block';
         try {
             const res = await fetch(`/api/admin/clientes/${id}`);
             if (!res.ok) {
@@ -57,13 +56,10 @@ async function openClienteModal(id = null) {
             document.getElementById('clienteEmail').value = cliente.email;
             estadoUsuarioSelect.value = cliente.estado_usuario;
 
-            // Poblar nuevos campos
             telefonoInput.value = cliente.telefono || '';
             ciudadInput.value = cliente.ciudad || '';
-            // Asegurarse de que la fecha_nacimiento esté en formato YYYY-MM-DD para el input date
             fechaNacimientoInput.value = cliente.fecha_nacimiento ? cliente.fecha_nacimiento.split('T')[0] : '';
-            epsSelect.value = cliente.eps_id || ''; // Seleccionar la EPS del cliente si existe
-
+            epsSelect.value = cliente.eps_id || '';
 
             contrasenaLabel.innerHTML = 'Nueva Contraseña (Opcional)';
             contrasenaInput.required = false;
@@ -77,14 +73,13 @@ async function openClienteModal(id = null) {
         }
     } else { // Modo Agregar
         modalTitle.textContent = 'Agregar Cliente';
-        if(estadoUsuarioDiv) estadoUsuarioDiv.style.display = 'none'; 
-        estadoUsuarioSelect.value = 'activo'; 
+        if(estadoUsuarioDiv) estadoUsuarioDiv.style.display = 'none';
+        estadoUsuarioSelect.value = 'activo';
 
-        // Los nuevos campos se limpian con form.reset()
         telefonoInput.value = '';
         ciudadInput.value = '';
         fechaNacimientoInput.value = '';
-        epsSelect.value = ''; // Resetear selección de EPS
+        epsSelect.value = '';
 
         contrasenaLabel.innerHTML = 'Contraseña <span class="text-danger">*</span>';
         contrasenaInput.required = true;
@@ -94,7 +89,6 @@ async function openClienteModal(id = null) {
     if (window.clienteModal) window.clienteModal.show();
 }
 
-// Add this new function
 async function openClientDetailModal(clientId) {
     const clientDetailContent = document.getElementById('clientDetailContent');
     const clientAlertsTableBody = document.getElementById('clientDetailAlertasTableBody');
@@ -105,7 +99,6 @@ async function openClientDetailModal(clientId) {
         return;
     }
 
-    // Initialize modal instance if not already done
     if (!window.clientDetailModalInstance) {
         const modalElement = document.getElementById('clientDetailModal');
         if (modalElement) {
@@ -117,11 +110,10 @@ async function openClientDetailModal(clientId) {
     }
 
     clientDetailContent.innerHTML = '<div class="text-center p-3"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Cargando...</span></div><p>Cargando detalles del cliente...</p></div>';
-    clientAlertsTableBody.innerHTML = '<tr><td colspan="8" class="text-center"><div class="spinner-border spinner-border-sm" role="status"></div> Cargando alertas...</td></tr>'; // COLSPAN AJUSTADO
+    clientAlertsTableBody.innerHTML = '<tr><td colspan="8" class="text-center"><div class="spinner-border spinner-border-sm" role="status"></div> Cargando alertas...</td></tr>';
     modalLabel.textContent = 'Detalles del Cliente';
 
     try {
-        // Fetch client details
         const clientRes = await fetch(`/api/admin/clientes/${clientId}`);
         if (!clientRes.ok) {
             const errData = await clientRes.json();
@@ -137,14 +129,19 @@ async function openClientDetailModal(clientId) {
                 <dt class="col-sm-3">Email:</dt><dd class="col-sm-9">${client.email || 'N/A'}</dd>
                 <dt class="col-sm-3">Teléfono:</dt><dd class="col-sm-9">${client.telefono || 'N/A'}</dd>
                 <dt class="col-sm-3">Ciudad:</dt><dd class="col-sm-9">${client.ciudad || 'N/A'}</dd>
-                <dt class="col-sm-3">EPS:</dt><dd class="col-sm-9">${client.eps_nombre || 'N/A'}</dd> <dt class="col-sm-3">Fec. Nacimiento:</dt><dd class="col-sm-9">${formatDate(client.fecha_nacimiento)}</dd>
+                <dt class="col-sm-3">EPS:</dt><dd class="col-sm-9">${client.eps_nombre || 'N/A'}</dd>
+                <dt class="col-sm-3">Fec. Nacimiento:</dt><dd class="col-sm-9">${formatDate(client.fecha_nacimiento)}</dd>
                 <dt class="col-sm-3">Fec. Registro:</dt><dd class="col-sm-9">${formatDate(client.fecha_registro)}</dd>
                 <dt class="col-sm-3">Estado:</dt><dd class="col-sm-9"><span class="badge ${client.estado_usuario === 'activo' ? 'bg-success' : 'bg-danger'}">${client.estado_usuario || 'N/A'}</span></dd>
                 <dt class="col-sm-3">Rol:</dt><dd class="col-sm-9">${client.rol || 'N/A'}</dd>
             </dl>
+            <div class="d-flex justify-content-center mt-3">
+                <button class="btn btn-primary btn-sm" id="btn-download-client-consolidated-receta" data-client-id="${client.id}" data-client-name="${client.nombre}">
+                    <i class="bi bi-file-earmark-medical-fill"></i> Descargar Receta Consolidada Activa
+                </button>
+            </div>
         `;
 
-        // Fetch alerts for this specific client using the modified backend or new endpoint
         const alertasRes = await fetch(`/api/admin/alertas?usuario_id=${clientId}`);
         if (!alertasRes.ok) {
              const errAlertData = await alertasRes.json();
@@ -154,19 +151,17 @@ async function openClientDetailModal(clientId) {
 
         clientAlertsTableBody.innerHTML = '';
         if (clientAlertas.length === 0) {
-            clientAlertsTableBody.innerHTML = '<tr><td colspan="8" class="text-center fst-italic">Este cliente no tiene alertas asignadas.</td></tr>'; // COLSPAN AJUSTADO
+            clientAlertsTableBody.innerHTML = '<tr><td colspan="8" class="text-center fst-italic">Este cliente no tiene alertas asignadas.</td></tr>';
         } else {
             clientAlertas.forEach(a => {
                 const estadoAlertBadgeClass = a.estado_alerta === 'activa' ? 'bg-success' :
-                                       a.estado_alerta === 'completada' ? 'bg-info text-dark' : /* Ensure text is visible on info */
-                                       a.estado_alerta === 'inactiva' ? 'bg-warning text-dark' : /* Ensure text is visible on warning */
+                                       a.estado_alerta === 'completada' ? 'bg-info text-dark' :
+                                       a.estado_alerta === 'inactiva' ? 'bg-warning text-dark' :
                                        a.estado_alerta === 'fallida' ? 'bg-danger' : 'bg-secondary';
-                
-                // Botón de imprimir receta solo si la alerta no está 'fallida'
-                const printButtonHtml = (a.estado_alerta !== 'fallida') ? 
-                                        `<button class="btn btn-sm btn-outline-secondary ms-2 btn-print-receta" data-alerta-id="${a.id}" title="Imprimir Receta Médica">
+
+                const printButtonHtml = `<button class="btn btn-sm btn-outline-secondary ms-2 btn-print-receta" data-alerta-id="${a.id}" title="Imprimir Receta Médica">
                                             <i class="bi bi-printer"></i> Receta
-                                        </button>` : '';
+                                        </button>`;
 
                 clientAlertsTableBody.innerHTML += `
                     <tr>
@@ -186,7 +181,7 @@ async function openClientDetailModal(clientId) {
         console.error('Error en openClientDetailModal:', error);
         modalLabel.textContent = 'Error al Cargar Detalles';
         clientDetailContent.innerHTML = `<div class="alert alert-danger">No se pudieron cargar los detalles del cliente: ${error.message}</div>`;
-        clientAlertsTableBody.innerHTML = `<tr><td colspan="8" class="text-center text-danger">Error al cargar alertas.</td></tr>`; // COLSPAN AJUSTADO
+        clientAlertsTableBody.innerHTML = `<tr><td colspan="8" class="text-center text-danger">Error al cargar alertas.</td></tr>`;
         if (window.clientDetailModalInstance) window.clientDetailModalInstance.show();
     }
 }
@@ -198,11 +193,11 @@ async function openMedicamentoModal(id = null) {
     const modalTitle = document.getElementById('medicamentoModalTitle');
 
     const estadoSelect = document.getElementById('medicamentoEstado');
-    const estadoMedicamentoDiv = document.getElementById('medicamentoEstadoDiv'); 
+    const estadoMedicamentoDiv = document.getElementById('medicamentoEstadoDiv');
 
     if (id) { // Modo Editar
         modalTitle.textContent = 'Editar Medicamento';
-        if(estadoMedicamentoDiv) estadoMedicamentoDiv.style.display = 'block'; 
+        if(estadoMedicamentoDiv) estadoMedicamentoDiv.style.display = 'block';
         try {
             const res = await fetch(`/api/admin/medicamentos/${id}`);
             if (!res.ok) {
@@ -225,8 +220,8 @@ async function openMedicamentoModal(id = null) {
         }
     } else { // Modo Agregar
         modalTitle.textContent = 'Agregar Medicamento';
-        if(estadoMedicamentoDiv) estadoMedicamentoDiv.style.display = 'none'; 
-        estadoSelect.value = 'disponible'; 
+        if(estadoMedicamentoDiv) estadoMedicamentoDiv.style.display = 'none';
+        estadoSelect.value = 'disponible';
     }
     if (window.medicamentoModal) window.medicamentoModal.show();
 }
@@ -238,11 +233,12 @@ async function populateSelect(selectElement, apiUrl, valueField, textFieldParts,
         if (!response.ok) throw new Error(errorMessage);
         const items = await response.json();
         items.forEach(item => {
-            const text = textFieldParts.map(part => item[part]).filter(Boolean).join(' - '); // Filter out null/undefined
+            const text = textFieldParts.map(part => item[part]).filter(Boolean).join(' - ');
             const option = new Option(text, item[valueField]);
             selectElement.add(option);
         });
-    } catch (error) {
+    }
+     catch (error) {
         console.error(error);
         alert(error.message);
     }
@@ -251,13 +247,14 @@ async function populateSelect(selectElement, apiUrl, valueField, textFieldParts,
 async function openAlertaModal(alertaId = null) {
     const form = document.getElementById('alertaForm');
     form.reset();
-    document.getElementById('alertaId').value = ''; 
+    document.getElementById('alertaId').value = '';
     const modalTitle = document.getElementById('alertaModalLabel');
     const usuarioSelect = document.getElementById('alertaUsuario');
     const medicamentoSelect = document.getElementById('alertaMedicamento');
     const estadoSelect = document.getElementById('alertaEstado');
 
     // Populate dropdowns
+    // FIX: Change API URL from '/api/admin/clientes?estado=activo&rol=cliente' to '/api/admin/clientes?estado=activo&rol=cliente' (already correct from previous fix)
     await populateSelect(usuarioSelect, '/api/admin/clientes?estado=activo&rol=cliente', 'id', ['nombre', 'cedula'], 'Seleccione un cliente activo...', 'No se pudieron cargar los clientes.');
     await populateSelect(medicamentoSelect, '/api/admin/medicamentos?estado=disponible', 'id', ['nombre'], 'Seleccione un medicamento disponible...', 'No se pudieron cargar los medicamentos.');
 
@@ -287,7 +284,7 @@ async function openAlertaModal(alertaId = null) {
         }
     } else {
         modalTitle.textContent = 'Asignar Nueva Alerta';
-        estadoSelect.value = 'activa'; // Default para nueva alerta
+        estadoSelect.value = 'activa';
     }
 
     if (window.alertaModal) window.alertaModal.show();

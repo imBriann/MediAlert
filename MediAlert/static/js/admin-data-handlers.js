@@ -222,6 +222,9 @@ async function loadAuditoria(moduleFilter = '', userSearchTerm = '') {
         }
 
         const logs = await fetchData(url, 'Error al cargar auditoría');
+        // Cache the original data for filtering if needed later, though not explicitly used here for re-filtering
+        // originalAuditoriaData = logs; // Uncomment if you implement client-side filtering without re-fetching
+
         tableBody.innerHTML = ''; 
 
         if (!logs || logs.length === 0) {
@@ -231,20 +234,23 @@ async function loadAuditoria(moduleFilter = '', userSearchTerm = '') {
 
         logs.forEach((log) => {
             const row = tableBody.insertRow();
-            row.insertCell().innerHTML = `<small>${formatTimestamp(log.fecha_hora)}</small>`;
-            row.insertCell().innerHTML = `<small>${log.nombre_usuario_app || 'Sistema'}</small>`;
-            row.insertCell().innerHTML = `<small>${log.cedula_usuario_app || 'N/A'}</small>`; // Added cedula
-            row.insertCell().innerHTML = `<small>${log.accion ? log.accion.replace(/_/g, ' ') : 'N/A'}</small>`;
-            row.insertCell().innerHTML = `<small>${getFriendlyTableName(log.tabla_afectada)}</small>`;
-            row.insertCell().innerHTML = `<small>${log.registro_id_afectado !== null ? log.registro_id_afectado : 'N/A'}</small>`;
+            // Ensure properties are accessed correctly from the log object
+            // Use logical OR (||) with 'N/A' for cleaner fallback
+            row.insertCell().innerHTML = `<small>${formatTimestamp(log.fecha_hora || '')}</small>`; // Date and Time
+            row.insertCell().innerHTML = `<small>${log.nombre_usuario_app || 'Sistema'}</small>`; // User Name (e.g., 'Administrador Principal' or 'Sistema')
+            row.insertCell().innerHTML = `<small>${log.cedula_usuario_app || 'N/A'}</small>`; // User ID (Cédula)
+            row.insertCell().innerHTML = `<small>${(log.accion ? log.accion.replace(/_/g, ' ') : 'N/A')}</small>`; // Action, replacing underscores
+            row.insertCell().innerHTML = `<small>${getFriendlyTableName(log.tabla_afectada || '')}</small>`; // Module/Table
+            row.insertCell().innerHTML = `<small>${log.registro_id_afectado !== null && typeof log.registro_id_afectado !== 'undefined' ? String(log.registro_id_afectado) : 'N/A'}</small>`; // Affected ID
             
             const cambiosCell = row.insertCell();
-            cambiosCell.innerHTML = generateChangeSummary(log.accion, log.datos_anteriores, log.datos_nuevos);
+            cambiosCell.innerHTML = generateChangeSummary(log.accion, log.datos_anteriores, log.datos_nuevos); // Changes Summary
             
             const detallesAdicionalesCell = row.insertCell();
-            detallesAdicionalesCell.innerHTML = formatJsonForDisplay(log.detalles_adicionales);
+            detallesAdicionalesCell.innerHTML = formatJsonForDisplay(log.detalles_adicionales); // Additional Details
         });
     } catch (error) {
+        console.error('Error en loadAuditoria:', error); // Log the actual error to console
         renderErrorRow(tableBody, 7, error); 
     }
 }

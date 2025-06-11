@@ -18,13 +18,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 alert('Acceso denegado. Se requiere rol de administrador.');
                 throw new Error('Acceso denegado.');
             }
-            
+
             const adminNameEl = document.getElementById('admin-name');
             if(adminNameEl) adminNameEl.textContent = data.nombre || 'Admin';
-            
+
             if(typeof showView === 'function') {
-                 resetOriginalData(); // Clear any cached data from previous sessions/loads
-                showView('view-clientes'); 
+                 resetOriginalData();
+                showView('view-clientes');
             } else {
                 console.error("La función showView no está definida.");
             }
@@ -56,7 +56,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // ESTE ES EL BLOQUE CORRECTO PARA LAS ALERTAS
     const searchAlertasInput = document.getElementById('search-alertas-input');
     if (searchAlertasInput) {
         searchAlertasInput.addEventListener('input', () => {
@@ -80,16 +79,16 @@ document.addEventListener('DOMContentLoaded', () => {
     if (searchAuditoriaInput) {
         searchAuditoriaInput.addEventListener('input', triggerAuditoriaLoad);
     }
-    if (auditoriaModuleFilter) { // Listener for module filter was in admin-ui-handlers.js, ensure it calls combined load
-        auditoriaModuleFilter.removeEventListener('change', window.handleAuditoriaModuleFilterChange); // Remove old if exists
-        window.handleAuditoriaModuleFilterChange = triggerAuditoriaLoad; // Assign new handler
+    if (auditoriaModuleFilter) {
+        auditoriaModuleFilter.removeEventListener('change', window.handleAuditoriaModuleFilterChange);
+        window.handleAuditoriaModuleFilterChange = triggerAuditoriaLoad;
         auditoriaModuleFilter.addEventListener('change', window.handleAuditoriaModuleFilterChange);
     }
 
 
     // --- Delegación de Eventos Principal ---
     document.body.addEventListener('click', async (e) => {
-        const targetElement = e.target.closest('button, a, div.report-option-card'); 
+        const targetElement = e.target.closest('button, a, div.report-option-card');
         if (!targetElement) return;
 
         // Navegación Sidebar
@@ -97,19 +96,18 @@ document.addEventListener('DOMContentLoaded', () => {
             e.preventDefault();
             const viewId = targetElement.dataset.view;
             if (viewId && typeof showView === 'function') {
-                // Reset search fields when changing views
                 if (searchClientesInput) searchClientesInput.value = '';
                 if (searchMedicamentosInput) searchMedicamentosInput.value = '';
                 if (searchAlertasInput) searchAlertasInput.value = '';
                 if (searchAuditoriaInput) searchAuditoriaInput.value = '';
                 if (auditoriaModuleFilter) auditoriaModuleFilter.value = '';
-                
-                resetOriginalData(); // Force re-fetch or use fresh data for the new view
+
+                resetOriginalData();
                 showView(viewId);
             }
         }
 
-        // Cierre de Sesión y Tema
+        // Cierre de Sesión
         if (targetElement.matches('#logout-btn')) {
             e.preventDefault();
             try {
@@ -120,8 +118,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 alert("Error al cerrar sesión.");
             }
         }
-        // Theme toggler is handled by theme.js generally or can be here if specific logic needed for #theme-toggler within admin dropdown
-
 
         // Botones "Agregar"
         if (targetElement.matches('#btn-add-cliente') && typeof openClienteModal === 'function') openClienteModal();
@@ -136,13 +132,13 @@ document.addEventListener('DOMContentLoaded', () => {
         if (targetElement.matches('.btn-toggle-status-cliente')) {
             const id = targetElement.dataset.id;
             const nombre = targetElement.dataset.nombre || 'este cliente';
-            const currentStatus = targetElement.dataset.status; 
+            const currentStatus = targetElement.dataset.status;
             const newStatus = currentStatus === 'activo' ? 'inactivo' : 'activo';
             const actionText = newStatus === 'inactivo' ? 'desactivar' : 'reactivar';
 
             if (confirm(`¿Estás seguro de que quieres ${actionText} a ${nombre}?`)) {
                 try {
-                    const response = await fetch(`/api/admin/clientes/${id}`, { 
+                    const response = await fetch(`/api/admin/clientes/${id}`, {
                         method: 'PUT',
                         headers: {'Content-Type': 'application/json'},
                         body: JSON.stringify({ estado_usuario: newStatus })
@@ -150,13 +146,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     const responseData = await response.json();
                     if (!response.ok) throw new Error(responseData.error || `Error al ${actionText} cliente.`);
 
-                    // Use global notification modal
                     showGlobalNotification('Actualización de Cliente', responseData.message || `Cliente ${actionText} con éxito.`, 'success');
 
-                    if (typeof loadClientes === 'function') loadClientes(); // Reload cards
+                    if (typeof loadClientes === 'function') loadClientes();
                 } catch (error) {
                     console.error(`Error al ${actionText} cliente:`, error);
-                    // Use global notification modal
                     showGlobalNotification('Error de Actualización', `Error al ${actionText} cliente: ${error.message}`, 'error');
                 }
             }
@@ -166,7 +160,6 @@ document.addEventListener('DOMContentLoaded', () => {
             openClientDetailModal(targetElement.dataset.id);
         }
 
-        // --- NUEVO: Botón "Ver Alertas" en la tabla de Clientes con Alertas (en vista de alertas) ---
         if (targetElement.matches('.btn-view-cliente-alerts') && typeof openClientDetailModal === 'function') {
             openClientDetailModal(targetElement.dataset.id);
         }
@@ -184,17 +177,17 @@ document.addEventListener('DOMContentLoaded', () => {
         if (targetElement.matches('.btn-edit-medicamento') && typeof openMedicamentoModal === 'function') {
             openMedicamentoModal(targetElement.dataset.id);
         }
-        if (targetElement.matches('.btn-delete-medicamento')) { 
+        if (targetElement.matches('.btn-delete-medicamento')) {
             const id = targetElement.dataset.id;
             const medNombre = targetElement.dataset.nombre || 'este medicamento';
             const currentStatusIcon = targetElement.querySelector('i.bi');
             const currentStatus = currentStatusIcon && currentStatusIcon.classList.contains('bi-capsule-pill') ? 'disponible' : 'discontinuado';
             const newStatus = currentStatus === 'disponible' ? 'discontinuado' : 'disponible';
             const actionText = newStatus === 'discontinuado' ? 'discontinuar' : 'reactivar';
-            
+
             if (confirm(`¿Estás seguro de que quieres ${actionText} ${medNombre}? Las alertas asociadas podrían inactivarse/reactivarse.`)) {
                  try {
-                    const response = await fetch(`/api/admin/medicamentos/${id}`, { 
+                    const response = await fetch(`/api/admin/medicamentos/${id}`, {
                         method: 'PUT',
                         headers: {'Content-Type': 'application/json'},
                         body: JSON.stringify({ estado_medicamento: newStatus })
@@ -202,22 +195,20 @@ document.addEventListener('DOMContentLoaded', () => {
                     const responseData = await response.json();
                     if (!response.ok) throw new Error(responseData.error || `Error al ${actionText} medicamento.`);
 
-                    // Use global notification modal
                     showGlobalNotification('Actualización de Medicamento', responseData.message || `Medicamento ${actionText} con éxito.`, 'success');
 
-                    originalMedicamentosData = []; // Invalidate cache
+                    originalMedicamentosData = [];
                     if(typeof loadMedicamentos === 'function') loadMedicamentos(searchMedicamentosInput ? searchMedicamentosInput.value : '');
-                    originalAlertasData = []; // Alertas might change status
+                    originalAlertasData = [];
                     if(typeof loadAlertas === 'function') loadAlertas(searchAlertasInput ? searchAlertasInput.value : '');
                 } catch (error) {
                     console.error(`Error al ${actionText} medicamento:`, error);
-                    // Use global notification modal
                     showGlobalNotification('Error de Actualización', `Error al ${actionText} medicamento: ${error.message}`, 'error');
                 }
             }
         }
 
-        // Botones de generación de reportes
+        // Botones de generación de reportes (general, en la vista de reportes)
         if (targetElement.matches('#btn-report-usuarios') && typeof generateUsuariosReport === 'function') {
             generateUsuariosReport();
         }
@@ -230,24 +221,55 @@ document.addEventListener('DOMContentLoaded', () => {
         if (targetElement.matches('#btn-report-auditoria') && typeof generateAuditoriaReport === 'function') {
             generateAuditoriaReport();
         }
+        // Consolidated Admin Report button (in the general reports view)
+        if (targetElement.matches('#btn-report-recetas-consolidadas-admin') && typeof generateConsolidatedRecetaPdfForAdmin === 'function') {
+            generateConsolidatedRecetaPdfForAdmin();
+        }
     });
+
+    // Listener for individual prescription print buttons (both for admin as part of client detail modal)
+    document.body.addEventListener('click', async (e) => {
+        const targetElement = e.target.closest('.btn-print-receta');
+        if (targetElement) {
+            const alertaId = targetElement.dataset.alertaId;
+            if (typeof generateRecetaMedicaPdf === 'function') {
+                generateRecetaMedicaPdf(alertaId);
+            } else {
+                showGlobalNotification('Error', 'La función de generación de PDF no está disponible.', 'error');
+            }
+        }
+
+        // NEW: Listener for "Download Consolidated Active Prescriptions" button within client detail modal
+        const consolidatedClientRecetaBtn = e.target.closest('#btn-download-client-consolidated-receta');
+        if (consolidatedClientRecetaBtn) {
+            const clientId = consolidatedClientRecetaBtn.dataset.clientId;
+            const clientName = consolidatedClientRecetaBtn.dataset.clientName;
+            if (typeof generateConsolidatedRecetaPdf === 'function') {
+                // Pass client ID and name to the reusable function
+                generateConsolidatedRecetaPdf(clientId, clientName);
+            } else {
+                showGlobalNotification('Error', 'La función de generación de PDF consolidado no está disponible.', 'error');
+            }
+        }
+    });
+
 
     // --- Manejo de Formularios ---
     const clienteFormEl = document.getElementById('clienteForm');
     if (clienteFormEl && typeof handleClienteSubmit === 'function') {
         clienteFormEl.addEventListener('submit', (e) => {
             handleClienteSubmit(e).then(() => {
-                originalClientesData = []; // Invalidate cache after submit
+                originalClientesData = [];
                 if (typeof loadClientes === 'function') loadClientes(searchClientesInput ? searchClientesInput.value : '');
             });
         });
     }
-    
+
     const medicamentoFormEl = document.getElementById('medicamentoForm');
     if (medicamentoFormEl && typeof handleMedicamentoSubmit === 'function') {
         medicamentoFormEl.addEventListener('submit', (e) => {
             handleMedicamentoSubmit(e).then(() => {
-                originalMedicamentosData = []; // Invalidate cache
+                originalMedicamentosData = [];
                 if (typeof loadMedicamentos === 'function') loadMedicamentos(searchMedicamentosInput ? searchMedicamentosInput.value : '');
             });
         });
@@ -257,7 +279,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (alertaFormEl && typeof handleAlertaSubmit === 'function') {
         alertaFormEl.addEventListener('submit', (e) => {
             handleAlertaSubmit(e).then(() => {
-                originalAlertasData = []; // Invalidate cache
+                originalAlertasData = [];
                 if (typeof loadAlertas === 'function') loadAlertas(searchAlertasInput ? searchAlertasInput.value : '');
             });
         });

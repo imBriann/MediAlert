@@ -17,14 +17,13 @@
             box-shadow: 0 4px 15px rgba(0,0,0,0.1);
         }
         #clientes-table-body td, #clientes-table-body th {
-            white-space: nowrap; 
+            white-space: nowrap;
         }
         .table-responsive {
-            overflow-x: auto; 
+            overflow-x: auto;
         }
-        /* Custom style for search bar width */
         .search-bar-container {
-            width: 320px; /* Adjust as needed, or use Bootstrap width classes like w-50, w-auto */
+            width: 320px;
         }
     </style>
 </head>
@@ -72,7 +71,7 @@
                 <div id="clientes-card-container" class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
                 </div>
             </div>
-            
+
             <div class="modal fade" id="clientDetailModal" tabindex="-1" aria-labelledby="clientDetailModalLabel" aria-hidden="true">
                 <div class="modal-dialog modal-xl">
                     <div class="modal-content">
@@ -128,7 +127,7 @@
                     </table>
                 </div>
             </div>
-            
+
             <div id="view-alertas" class="view-content" style="display: none;">
                 <h1>Gestión de Alertas por Cliente</h1>
                 <div class="d-flex justify-content-between align-items-center mb-3">
@@ -236,6 +235,15 @@
                                     <i class="bi bi-clipboard2-data-fill fs-1 text-info mb-2"></i>
                                     <h5 class="card-title mb-1">Auditoría</h5>
                                     <p class="card-text small">Últimos 100 eventos de auditoría del sistema.</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col text-decoration-none">
+                            <div class="card h-100 report-option-card bg-body-tertiary" id="btn-report-recetas-consolidadas-admin">
+                                <div class="card-body text-center">
+                                    <i class="bi bi-file-earmark-medical-fill fs-1 text-secondary mb-2"></i>
+                                    <h5 class="card-title mb-1">Recetas Consolidadas (Admin)</h5>
+                                    <p class="card-text small">Recetas de todos los medicamentos activos para todos los clientes.</p>
                                 </div>
                             </div>
                         </div>
@@ -469,7 +477,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 
-    <script src="{{ url_for('static', filename='js/theme.js') }}"></script> 
+    <script src="{{ url_for('static', filename='js/theme.js') }}"></script>
     <script src="{{ url_for('static', filename='js/shared-utils.js') }}"></script>
     <script src="{{ url_for('static', filename='js/admin-data-handlers.js') }}"></script>
     <script src="{{ url_for('static', filename='js/admin-ui-handlers.js') }}"></script>
