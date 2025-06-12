@@ -1,10 +1,12 @@
+# backend/In_Admin.py
+
 import psycopg2
 import os
 from dotenv import load_dotenv
 from werkzeug.security import generate_password_hash
 import random
 from datetime import datetime, timedelta, date
-import re # Importar el módulo re
+import re
 
 # Cargar variables de entorno desde el archivo .env
 load_dotenv()
@@ -214,15 +216,16 @@ def limpiar_tablas(conn):
 
 def insertar_eps_lote(conn, eps_a_insertar):
     cur = conn.cursor()
-    print(f"Insertando {len(eps_a_insertar)} EPS...")
+    print(f"Insertando {len(eps_a_insertar)} EPS con sus logos...")
     sql_insert_eps = """
-        INSERT INTO eps (nombre, nit)
-        VALUES (%s, %s)
+        INSERT INTO eps (nombre, nit, logo_url)
+        VALUES (%s, %s, %s)
         ON CONFLICT (nombre) DO NOTHING;
     """
     for eps in eps_a_insertar:
         try:
-            cur.execute(sql_insert_eps, (eps['nombre'], eps['nit']))
+            logo_url = eps.get('logo_url', None)
+            cur.execute(sql_insert_eps, (eps['nombre'], eps['nit'], logo_url))
         except psycopg2.Error as e:
             print(f"Error al insertar EPS {eps['nombre']}: {e}")
             conn.rollback()
@@ -384,21 +387,19 @@ def main():
         print("Conexión a la base de datos establecida.")
         limpiar_tablas(conn)
 
-        # --- Insertar EPS ---
         lista_eps_colombia = [
-            {"nombre": "Nueva EPS", "nit": "8301086054"},
-            {"nombre": "Sura EPS", "nit": "8909031357"},
-            {"nombre": "Sanitas EPS", "nit": "8605136814"},
-            {"nombre": "Compensar EPS", "nit": "8600667017"},
-            {"nombre": "Coosalud EPS", "nit": "8002047247"},
-            {"nombre": "Salud Total EPS", "nit": "8001021464"},
-            {"nombre": "Famisanar EPS", "nit": "8605330366"},
-            {"nombre": "Aliansalud EPS", "nit": "8300262108"},
-            {"nombre": "EPM Salud", "nit": "8110000632"},
-            {"nombre": "SaludMia EPS", "nit": "9009848521"}
+            {"nombre": "Nueva EPS",       "nit": "8301086054", "logo_url": "/static/img/nueva-eps.png"},
+            {"nombre": "Sura EPS",        "nit": "8909031357", "logo_url": "/static/img/sura-eps.png"},
+            {"nombre": "Sanitas EPS",     "nit": "8605136814", "logo_url": "/static/img/sanitas-eps.png"},
+            {"nombre": "Compensar EPS",   "nit": "8600667017", "logo_url": "/static/img/compensar-eps.png"},
+            {"nombre": "Coosalud EPS",    "nit": "8002047247", "logo_url": "/static/img/coosalud-eps.png"},
+            {"nombre": "Salud Total EPS", "nit": "8001021464", "logo_url": "/static/img/salud-total-eps.png"},
+            {"nombre": "Famisanar EPS",   "nit": "8605330366", "logo_url": "/static/img/famisanar-eps.png"},
+            {"nombre": "Aliansalud EPS",  "nit": "8300262108", "logo_url": "/static/img/aliansalud-eps.png"},
+            {"nombre": "EPM Salud",       "nit": "8110000632", "logo_url": "/static/img/epm-salud.png"},
+            {"nombre": "SaludMia EPS",    "nit": "9009848521", "logo_url": "/static/img/saludmia-eps.png"}
         ]
         insertar_eps_lote(conn, lista_eps_colombia)
-
         # Obtener IDs de EPS para asignarlos a los usuarios
         cur = conn.cursor()
         cur.execute("SELECT id FROM eps WHERE estado = 'activo'")

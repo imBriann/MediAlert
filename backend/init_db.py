@@ -34,10 +34,11 @@ CREATE SEQUENCE eps_id_seq START WITH 1 INCREMENT BY 1; /* NUEVO */
 
 -- Tabla: eps
 -- Descripción: Listado de Entidades Promotoras de Salud (EPS) colombianas.
-CREATE TABLE eps ( /* NUEVO */
+CREATE TABLE eps ( 
     id INTEGER PRIMARY KEY DEFAULT nextval('eps_id_seq'),
     nombre VARCHAR(100) UNIQUE NOT NULL,
-    nit VARCHAR(20) UNIQUE,
+    nit VARCHAR(20) NOT NULL UNIQUE,
+    logo_url VARCHAR(255) NULL,
     estado VARCHAR(10) DEFAULT 'activo' NOT NULL CHECK (estado IN ('activo', 'inactivo'))
 );
 COMMENT ON TABLE eps IS 'Listado de Entidades Promotoras de Salud (EPS) colombianas.';

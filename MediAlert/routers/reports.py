@@ -1,7 +1,11 @@
 # medialert/routers/reports.py
 
 from flask import Blueprint, request, jsonify, send_from_directory
-from services.report_service import log_report_generation, get_report_logs, save_pdf_file, get_pdf_file_info, get_all_active_consolidated_recipes
+# 1. Actualiza la línea de importación
+from services.report_service import (
+    log_report_generation, get_report_logs, save_pdf_file, 
+    get_pdf_file_info, get_all_active_consolidated_recipes, get_audit_logs
+)
 from utils.decorators import admin_required
 import os
 
@@ -51,15 +55,19 @@ def upload_report_pdf():
     except Exception as e:
         return jsonify({'error': f'Error interno al guardar el archivo PDF: {e}'}), 500
 
-@reports_bp.route('/auditoria', methods=['GET']) # This is the route being requested
+@reports_bp.route('/auditoria', methods=['GET'])
 @admin_required
 def get_auditoria_logs():
-    limit = request.args.get('limit', type=int, default=50)
+    limit = request.args.get('limit', type=int, default=100)
+    module_filter = request.args.get('tabla')
+    user_search = request.args.get('search_user') # El frontend usa 'search_user' en el query
     try:
-        logs = get_report_logs(limit)
+        # Llama a la nueva y correcta función de servicio
+        logs = get_audit_logs(limit=limit, tabla_filtro=module_filter, user_search_term=user_search)
         return jsonify(logs)
     except Exception as e:
         return jsonify({'error': f'Error al cargar los registros de auditoría: {e}'}), 500
+
 
 @reports_bp.route('/reportes/download/<int:log_id>', methods=['GET'])
 @admin_required

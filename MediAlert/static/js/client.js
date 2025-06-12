@@ -96,8 +96,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         const targetElement = e.target.closest('.btn-print-receta');
         if (targetElement) {
             const alertaId = targetElement.dataset.alertaId;
-            if (typeof generateRecetaMedicaPdf === 'function') {
-                generateRecetaMedicaPdf(alertaId);
+            // AHORA LLAMA A LA NUEVA FUNCIÓN
+            if (typeof generatePlanDeManejoPdf === 'function') {
+                generatePlanDeManejoPdf(alertaId);
             } else {
                 showGlobalNotification('Error', 'La función de generación de PDF no está disponible. Asegúrate de que el script report-generator.js esté cargado.', 'error');
             }

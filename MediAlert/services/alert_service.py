@@ -336,3 +336,49 @@ def get_recipe_data(alerta_id):
     finally:
         if conn:
             conn.close()
+            
+class AlertService:
+    def __init__(self, db_conn=None):
+        self.db_conn = db_conn if db_conn else get_db_connection()
+        self.cursor = self.db_conn.cursor(dictionary=True)
+
+    def get_receta_medica_data(self, alerta_id: int):
+        query = """
+            SELECT
+                a.id_alerta as alerta_id,
+                c.nombre as cliente_nombre,
+                c.cedula as cliente_cedula,
+                c.fecha_nacimiento as cliente_fecha_nacimiento,
+                c.telefono as cliente_telefono,
+                c.ciudad as cliente_ciudad,
+                e.nombre_eps as eps_nombre,
+                e.logo_url as eps_logo_url,  -- Campo añadido
+                m.nombre as medicamento_nombre,
+                m.descripcion as medicamento_descripcion,
+                m.composicion as medicamento_composicion,
+                m.indicaciones as medicamento_indicaciones,
+                m.rango_edad as medicamento_rango_edad,
+                a.dosis,
+                a.frecuencia,
+                a.fecha_inicio,
+                a.fecha_fin,
+                a.hora_preferida,
+                a.estado_alerta,
+                asig.nombre as asignador_nombre,
+                asig.cedula as asignador_cedula,
+                asig.rol as asignador_rol,
+                a.cliente_id
+            FROM alertas a
+            JOIN usuarios c ON a.cliente_id = c.id_usuario
+            JOIN medicamentos m ON a.medicamento_id = m.id_medicamento
+            LEFT JOIN eps e ON c.eps_id = e.id_eps
+            LEFT JOIN usuarios asig ON a.asignado_por = asig.id_usuario
+            WHERE a.id_alerta = %s;
+        """
+        self.cursor.execute(query, (alerta_id,))
+        result = self.cursor.fetchone()
+        return result
+
+    def __del__(self):
+        self.cursor.close()
+        self.db_conn.close()

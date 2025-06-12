@@ -158,3 +158,52 @@ def get_all_active_consolidated_recipes():
     finally:
         if conn:
             conn.close()
+            
+def get_audit_logs(limit=100, tabla_filtro=None, user_search_term=None):
+    """Obtiene el historial de auditoría del sistema con filtros."""
+    conn = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+
+        query_parts = ["""
+            SELECT
+                aud.id, aud.fecha_hora, u_app.nombre as nombre_usuario_app,
+                u_app.cedula as cedula_usuario_app,
+                aud.usuario_db as usuario_postgres, aud.accion, aud.tabla_afectada,
+                aud.registro_id_afectado, aud.datos_anteriores, aud.datos_nuevos,
+                aud.detalles_adicionales
+            FROM auditoria aud
+            LEFT JOIN usuarios u_app ON aud.usuario_id_app = u_app.id
+        """]
+        conditions = []
+        params = []
+
+        if tabla_filtro:
+            conditions.append("aud.tabla_afectada = %s")
+            params.append(tabla_filtro)
+
+        if user_search_term:
+            conditions.append("(u_app.nombre ILIKE %s OR u_app.cedula ILIKE %s)")
+            params.append(f"%{user_search_term}%")
+            params.append(f"%{user_search_term}%")
+
+        if conditions:
+            query_parts.append("WHERE " + " AND ".join(conditions))
+
+        query_parts.append("ORDER BY aud.fecha_hora DESC")
+
+        if limit:
+            query_parts.append("LIMIT %s")
+            params.append(limit)
+
+        final_query = " ".join(query_parts)
+        cur.execute(final_query, tuple(params))
+        logs = cur.fetchall()
+        return logs
+    except psycopg2.Error as e:
+        current_app.logger.error(f"Error de BD al obtener logs de auditoría: {e}")
+        raise
+    finally:
+        if conn:
+            conn.close()
