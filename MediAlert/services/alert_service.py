@@ -298,6 +298,7 @@ def get_recipe_data(alerta_id):
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
         
+        # MODIFICADO: Añadir e.logo_url y e.tipo_regimen a la consulta
         cur.execute("""
             SELECT
                 a.id as alerta_id, a.dosis, a.frecuencia, a.fecha_inicio, a.fecha_fin, a.hora_preferida, a.estado as estado_alerta,
@@ -306,8 +307,9 @@ def get_recipe_data(alerta_id):
                 m.nombre as medicamento_nombre, m.descripcion as medicamento_descripcion, m.composicion as medicamento_composicion,
                 m.indicaciones as medicamento_indicaciones, m.sintomas_secundarios as medicamento_sintomas_secundarios,
                 m.rango_edad as medicamento_rango_edad,
-                e.nombre as eps_nombre, e.nit as eps_nit,
-                ap.nombre as asignador_nombre, ap.cedula as asignador_cedula, ap.rol as asignador_rol
+                e.nombre as eps_nombre, e.nit as eps_nit, e.logo_url as eps_logo_url, e.tipo_regimen as eps_tipo_regimen,
+                ap.nombre as asignador_nombre, ap.cedula as asignador_cedula, ap.rol as asignador_rol,
+                a.usuario_id -- Se incluye para validación de permisos
             FROM alertas a
             JOIN usuarios u ON a.usuario_id = u.id
             JOIN medicamentos m ON a.medicamento_id = m.id
@@ -319,6 +321,7 @@ def get_recipe_data(alerta_id):
         receta_data = cur.fetchone()
 
         if receta_data:
+            # La serialización de fechas ya está correctamente manejada
             if receta_data.get('fecha_inicio'):
                 receta_data['fecha_inicio'] = receta_data['fecha_inicio'].isoformat()
             if receta_data.get('fecha_fin'):

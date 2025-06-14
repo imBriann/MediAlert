@@ -39,6 +39,7 @@ CREATE TABLE eps (
     nombre VARCHAR(100) UNIQUE NOT NULL,
     nit VARCHAR(20) NOT NULL UNIQUE,
     logo_url VARCHAR(255) NULL,
+    tipo_regimen VARCHAR(20) CHECK (tipo_regimen IN ('Contributivo', 'Subsidiado', 'Especial')), -- NUEVO: Para el régimen
     estado VARCHAR(10) DEFAULT 'activo' NOT NULL CHECK (estado IN ('activo', 'inactivo'))
 );
 COMMENT ON TABLE eps IS 'Listado de Entidades Promotoras de Salud (EPS) colombianas.';
@@ -46,6 +47,8 @@ COMMENT ON COLUMN eps.id IS 'Identificador único de la EPS (autonumérico).';
 COMMENT ON COLUMN eps.nombre IS 'Nombre de la EPS.';
 COMMENT ON COLUMN eps.nit IS 'Número de Identificación Tributaria de la EPS.';
 COMMENT ON COLUMN eps.estado IS 'Estado de la EPS (activo o inactivo).';
+COMMENT ON COLUMN eps.logo_url IS 'Ruta relativa al logo de la EPS (ej: /static/img/logos/sura.png).'; -- NUEVO
+COMMENT ON COLUMN eps.tipo_regimen IS 'Tipo de régimen de afiliación (Contributivo o Subsidiado).'; -- NUEVO
 
 
 -- Tabla: usuarios

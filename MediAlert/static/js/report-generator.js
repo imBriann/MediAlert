@@ -66,8 +66,10 @@ function calcularDosisPorDia(frecuencia) {
     return null; // No se puede determinar
 }
 
+// MediAlert/static/js/report-generator.js
+
 /**
- * Genera el PDF con el nuevo formato "Plan de Manejo".
+ * Genera el PDF con el nuevo formato "Plan de Manejo" basado en datos reales.
  * @param {string} alertaId - El ID de la alerta para la cual generar el plan.
  */
 async function generatePlanDeManejoPdf(alertaId) {
@@ -85,47 +87,47 @@ async function generatePlanDeManejoPdf(alertaId) {
         let currentY = 0;
         const pageWidth = doc.internal.pageSize.getWidth();
 
-        // 1. Encabezado de la Institución
-        const logoUrl = '/static/img/logo_hjs.png'; // Asumiendo que el logo está en esta ruta
-        const logoBase64 = await getLogoBase64DataUrl(logoUrl);
-        if (logoBase64) {
-            doc.addImage(logoBase64, 'PNG', margin, 35, 60, 60);
+        // --- 1. Encabezado de la EPS (Dinámico) ---
+        if (recetaData.eps_logo_url) {
+            const logoBase64 = await getLogoBase64DataUrl(recetaData.eps_logo_url);
+            if (logoBase64) {
+                doc.addImage(logoBase64, 'PNG', margin, 35, 60, 60); // Ajusta tamaño según necesites
+            }
         }
 
         doc.setFont('helvetica', 'bold');
         doc.setFontSize(10);
-        doc.text('ESE HOSPITAL JORGE CRISTO SAHIU', margin + 70, 50);
+        doc.text(recetaData.eps_nombre || 'Entidad Promotora de Salud', margin + 70, 50);
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(8);
-        doc.text('NIT: 807.004.631-3', margin + 70, 62);
-        doc.text('CALLE 5 N 7-49 VILLA DEL ROSARIO NORTE DE SANTANDER', margin + 70, 74);
-
+        doc.text(`NIT: ${recetaData.eps_nit || 'N/A'}`, margin + 70, 62);
+        
         doc.setFontSize(12);
         doc.setFont('helvetica', 'bold');
-        doc.text('PLAN DE MANEJO', pageWidth / 2, 110, { align: 'center' });
+        doc.text('PLAN DE MANEJO', pageWidth / 2, 100, { align: 'center' });
 
         doc.setFontSize(9);
         doc.setFont('helvetica', 'normal');
-        doc.text(`Urgencias`, margin, 130);
-        doc.text(`Fecha: ${new Date().toLocaleDateString('es-CO')} ${new Date().toLocaleTimeString('es-CO')}`, pageWidth - margin, 130, { align: 'right' });
-        currentY = 145;
+        doc.text(`Urgencias`, margin, 120); // Puedes hacerlo dinámico si tienes ese dato
+        doc.text(`Fecha: ${new Date().toLocaleDateString('es-CO')} ${new Date().toLocaleTimeString('es-CO')}`, pageWidth - margin, 120, { align: 'right' });
+        currentY = 135;
 
-        // 2. Información del Paciente en un recuadro
+        // --- 2. Información del Paciente en recuadro (Dinámico) ---
         doc.setDrawColor(180, 180, 180);
         doc.rect(margin, currentY, pageWidth - (margin * 2), 65);
         currentY += 15;
         const col1X = margin + 5;
-        const col2X = margin + 250;
+        const col2X = margin + 280; // Ajusta esta posición si es necesario
 
         doc.setFont('helvetica', 'bold');
-        doc.text('CRUZ RODRIGUEZ KATHERINE', col1X, currentY); // Usando datos de la imagen como ejemplo
+        doc.text((recetaData.cliente_nombre || 'N/A').toUpperCase(), col1X, currentY);
         doc.text(`CC - ${recetaData.cliente_cedula || 'N/A'}`, col2X, currentY);
         currentY += 15;
 
         doc.setFont('helvetica', 'normal');
         const edad = recetaData.cliente_fecha_nacimiento ? `${calculateAge(recetaData.cliente_fecha_nacimiento)} AÑOS` : 'N/A';
         doc.text(`Edad: ${edad}`, col1X, currentY);
-        doc.text(`Sexo: Femenino`, col2X, currentY);
+        doc.text(`Sexo: Femenino`, col2X, currentY); // NOTA: Este dato no está en el modelo, se usa un placeholder.
         currentY += 15;
 
         doc.text(`Nacimiento: ${formatDate(recetaData.cliente_fecha_nacimiento)}`, col1X, currentY);
@@ -133,72 +135,73 @@ async function generatePlanDeManejoPdf(alertaId) {
         currentY += 15;
 
         doc.text(`Dirección: ${recetaData.cliente_ciudad || 'N/A'}`, col1X, currentY);
-        doc.text(`Empresa: ${recetaData.eps_nombre || 'N/A'}`, col2X, currentY);
+        // NUEVO: Mostrar el tipo de régimen de la EPS
+        const regimenTexto = `Empresa: ${recetaData.eps_nombre || 'N/A'} (${recetaData.eps_tipo_regimen || 'No especificado'})`;
+        doc.text(regimenTexto.toUpperCase(), col2X, currentY);
         
-        currentY += 30; // Espacio después del recuadro de paciente
+        currentY += 30;
 
-        // 3. Tabla de Detalle del Servicio
-        const startDate = recetaData.fecha_inicio ? new Date(recetaData.fecha_inicio + 'T00:00:00Z') : null;
-        const endDate = recetaData.fecha_fin ? new Date(recetaData.fecha_fin + 'T00:00:00Z') : null;
-        let duracionDias = 'N/A';
+        // --- 3. Tabla de Detalle del Servicio (Dinámico) ---
+        const startDate = recetaData.fecha_inicio ? new Date(recetaData.fecha_inicio) : null;
+        const endDate = recetaData.fecha_fin ? new Date(recetaData.fecha_fin) : null;
+        let duracionDias = 'TIEMPO INDEFINIDO';
         let cantidadTotal = null;
 
         if (startDate && endDate) {
-            duracionDias = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24)) + 1; // +1 para incluir el día de inicio
+            // +1 para incluir el día de inicio en el conteo
+            duracionDias = `${Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24)) + 1} DÍAS`;
         }
 
         const dosisPorDia = calcularDosisPorDia(recetaData.frecuencia);
-        if (dosisPorDia && duracionDias !== 'N/A') {
-            cantidadTotal = dosisPorDia * duracionDias;
+        if (dosisPorDia && startDate && endDate) {
+            const diasTratamiento = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24)) + 1;
+            cantidadTotal = dosisPorDia * diasTratamiento;
         }
 
-        const detalleServicio = `AAI - ORDEN MEDICA .// ${recetaData.medicamento_nombre || ''} ${recetaData.dosis || ''} VOP ${recetaData.frecuencia || ''} POR ${duracionDias !== 'N/A' ? duracionDias + ' DIAS' : 'TIEMPO INDEFINIDO'}`;
-
-        const tableBody = [[
-            '1',
-            detalleServicio,
-            cantidadTotal !== null ? cantidadTotal.toString() : 'N/A',
-            numeroALetras(cantidadTotal).toUpperCase()
-        ]];
+        const detalleServicio = `AAI - ORDEN MEDICA .// ${(recetaData.medicamento_nombre || '').toUpperCase()} ${(recetaData.dosis || '').toUpperCase()} VOP ${(recetaData.frecuencia || '').toUpperCase()} POR ${duracionDias}`;
 
         doc.autoTable({
             startY: currentY,
             head: [['ITEM', 'DETALLE DEL SERVICIO', 'CANT', 'EN LETRAS']],
-            body: tableBody,
+            body: [[
+                '1',
+                detalleServicio,
+                cantidadTotal !== null ? cantidadTotal.toString() : 'N/A',
+                cantidadTotal !== null ? numeroALetras(cantidadTotal).toUpperCase() : 'N/A'
+            ]],
             theme: 'grid',
             styles: { fontSize: 8, cellPadding: 5 },
             headStyles: { fillColor: [220, 220, 220], textColor: [0, 0, 0], fontStyle: 'bold' }
         });
         currentY = doc.autoTable.previous.finalY + 20;
 
-        // 4. Diagnóstico
+        // --- 4. Diagnóstico ---
         doc.setFont('helvetica', 'bold');
         doc.text('DIAGNÓSTICO:', margin, currentY);
         doc.setFont('helvetica', 'normal');
-        // NOTA: El modelo de datos actual no incluye un diagnóstico. Se usa un placeholder.
-        doc.text('B019 VARICELA SIN COMPLICACIONES (Placeholder)', margin + 80, currentY);
+        // NOTA: El modelo de datos no incluye un diagnóstico. Se usa un placeholder.
+        doc.text('B019 VARICELA SIN COMPLICACIONES (Placeholder de diagnóstico)', margin + 80, currentY);
         currentY += 80;
 
-        // 5. Firma del Médico
-        doc.line(margin, currentY, margin + 250, currentY); // Línea para la firma
+        // --- 5. Firma del Médico (Dinámico) ---
+        doc.line(margin, currentY, margin + 250, currentY);
         currentY += 15;
         doc.setFont('helvetica', 'bold');
-        doc.text(recetaData.asignador_nombre || 'N/A', margin, currentY);
+        doc.text((recetaData.asignador_nombre || 'N/A').toUpperCase(), margin, currentY);
         currentY += 12;
         doc.setFont('helvetica', 'normal');
         doc.text(`C.C. ${recetaData.asignador_cedula || 'N/A'}`, margin, currentY);
         currentY += 12;
-        // NOTA: El modelo de datos no tiene especialidad, usamos el rol.
-        doc.text(recetaData.asignador_rol === 'admin' ? 'MEDICINA GENERAL' : (recetaData.asignador_rol || 'N/A'), margin, currentY);
+        doc.text('MEDICINA GENERAL', margin, currentY); // Placeholder para especialidad
         currentY += 25;
         
-        // Footer
+        // --- 6. Footer ---
         doc.setFontSize(8);
         const impresoPor = `Fecha de impresión: ${new Date().toLocaleDateString('es-CO')} Impreso por ${recetaData.asignador_nombre || 'Sistema'}`;
         doc.text(impresoPor, margin, currentY);
 
-
-        doc.save(`Plan_de_Manejo_Alerta_${alertaId}_${new Date().toISOString().slice(0, 10)}.pdf`);
+        // Guardar el PDF y notificar
+        doc.save(`Plan_de_Manejo_${recetaData.cliente_nombre.replace(/\s/g, '_')}_${alertaId}.pdf`);
         showGlobalNotification('Receta Generada', 'El Plan de Manejo se ha generado y descargado con éxito.', 'success');
 
     } catch (error) {
