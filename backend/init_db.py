@@ -6,7 +6,7 @@ from datetime import date, datetime, timedelta # Importar date
 
 # --- Configuración de la Conexión a la Base de Datos ---
 PG_HOST = os.getenv('PG_HOST', 'localhost')
-PG_DB = os.getenv('PG_DB', 'medialert')
+PG_DB = os.getenv('PG_DB', 'MEDIALERT')
 PG_USER = os.getenv('PG_USER', 'postgres')
 PG_PASS = os.getenv('PG_PASS', '0102')  # ¡Usa tu contraseña real o una variable de entorno!
 PG_PORT = os.getenv('PG_PORT', '5432')
@@ -512,14 +512,17 @@ lista_medicamentos = [
 
 # Lista de EPS comunes en Colombia, para la inserción inicial
 lista_eps_a_insertar = [
-    {"nombre": "Nueva EPS", "nit": "8301086054"},
-    {"nombre": "Sura EPS", "nit": "8909031357"},
-    {"nombre": "Sanitas EPS", "nit": "8605136814"},
-    {"nombre": "Compensar EPS", "nit": "8600667017"},
-    {"nombre": "Coosalud EPS", "nit": "8002047247"},
-    {"nombre": "Salud Total EPS", "nit": "8001021464"},
-    {"nombre": "Famisanar EPS", "nit": "8605330366"},
-]
+            {"nombre": "Nueva EPS",       "nit": "8301086054", "logo_url": "/static/img/nueva-eps.png"},
+            {"nombre": "Sura EPS",        "nit": "8909031357", "logo_url": "/static/img/sura-eps.png"},
+            {"nombre": "Sanitas EPS",     "nit": "8605136814", "logo_url": "/static/img/sanitas-eps.png"},
+            {"nombre": "Compensar EPS",   "nit": "8600667017", "logo_url": "/static/img/compensar-eps.png"},
+            {"nombre": "Coosalud EPS",    "nit": "8002047247", "logo_url": "/static/img/coosalud-eps.png"},
+            {"nombre": "Salud Total EPS", "nit": "8001021464", "logo_url": "/static/img/salud-total-eps.png"},
+            {"nombre": "Famisanar EPS",   "nit": "8605330366", "logo_url": "/static/img/famisanar-eps.png"},
+            {"nombre": "Aliansalud EPS",  "nit": "8300262108", "logo_url": "/static/img/aliansalud-eps.png"},
+            {"nombre": "EPM Salud",       "nit": "8110000632", "logo_url": "/static/img/epm-salud.png"},
+            {"nombre": "SaludMia EPS",    "nit": "9009848521", "logo_url": "/static/img/saludmia-eps.png"}
+        ]
 
 def inicializar_db():
     conn = None
