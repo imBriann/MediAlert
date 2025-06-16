@@ -266,7 +266,7 @@
         <div class="modal-dialog modal-lg">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title" id="clienteModalTitle">Agregar Cliente</h5>
+                    <h5 class="modal-title" id="clienteModalTitle">Agregar Usuario</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
@@ -301,9 +301,28 @@
                             <input type="date" class="form-control" id="clienteFechaNacimiento">
                         </div>
                         <div class="mb-3">
+                            <label for="clienteGenero" class="form-label">Género</label>
+                            <select class="form-select" id="clienteGenero">
+                                <option value="">Seleccione...</option>
+                                <option value="Masculino">Masculino</option>
+                                <option value="Femenino">Femenino</option>
+                                <option value="Otro">Otro</option>
+                                <option value="Prefiero no decirlo">Prefiero no decirlo</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
                             <label for="clienteEps" class="form-label">EPS</label>
                             <select class="form-select" id="clienteEps">
-                                </select>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label for="clienteTipoRegimen" class="form-label">Tipo de Régimen</label>
+                            <select class="form-select" id="clienteTipoRegimen">
+                                <option value="">Seleccione...</option>
+                                <option value="Contributivo">Contributivo</option>
+                                <option value="Subsidiado">Subsidiado</option>
+                                <option value="Especial">Especial</option>
+                            </select>
                         </div>
                         <div class="mb-3">
                             <label for="clienteContrasena" class="form-label" id="clienteContrasenaLabel">Contraseña <span class="text-danger">*</span></label>

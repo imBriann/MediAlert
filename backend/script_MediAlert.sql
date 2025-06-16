@@ -1,10 +1,8 @@
 -- =====================================================================
 -- Script para la Creación de la Estructura de la Base de Datos MediAlert
--- Versión 4.0 - Optimizada con Índices y Mejoras de Seguridad
 -- =====================================================================
 
 -- ** SECCIÓN 1: LIMPIEZA INICIAL **
--- Borra todos los objetos de la base de datos para una reinstalación limpia.
 DROP TRIGGER IF EXISTS trg_usuarios_auditoria ON usuarios;
 DROP TRIGGER IF EXISTS trg_medicamentos_auditoria ON medicamentos;
 DROP TRIGGER IF EXISTS trg_alertas_auditoria ON alertas;
@@ -64,6 +62,7 @@ CREATE TABLE usuarios (
     fecha_nacimiento DATE,
     telefono VARCHAR(20),
     ciudad VARCHAR(100),
+    genero VARCHAR(20) CHECK (genero IN ('Masculino', 'Femenino', 'Otro', 'Prefiero no decirlo')),
     fecha_registro DATE DEFAULT CURRENT_DATE,
     eps_id INTEGER,
     tipo_regimen VARCHAR(20) CHECK (tipo_regimen IN ('Contributivo', 'Subsidiado', 'Especial')),
@@ -122,14 +121,12 @@ CREATE TABLE reportes_log (
 );
 
 
--- ** SECCIÓN 4: ÍNDICES PARA MEJORAR RENDIMIENTO **
--- Los índices en claves foráneas aceleran drásticamente los JOINs y las búsquedas.
+-- ** SECCIÓN 4: ÍNDICES **
 CREATE INDEX idx_usuarios_eps_id ON usuarios(eps_id);
 CREATE INDEX idx_alertas_usuario_id ON alertas(usuario_id);
 CREATE INDEX idx_alertas_medicamento_id ON alertas(medicamento_id);
 CREATE INDEX idx_alertas_asignado_por_id ON alertas(asignado_por_usuario_id);
 CREATE INDEX idx_reportes_log_generado_por_id ON reportes_log(generado_por_usuario_id);
--- Índice en columnas de búsqueda frecuente
 CREATE INDEX idx_usuarios_email ON usuarios(email);
 CREATE INDEX idx_alertas_estado ON alertas(estado);
 
@@ -194,9 +191,9 @@ RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER AS $$
 BEGIN
     IF OLD.rol = 'cliente' THEN
         RAISE NOTICE 'El borrado físico de clientes (ID: %) está prevenido. Actualice su estado a "inactivo" en su lugar.', OLD.id;
-        RETURN NULL; -- Cancela la operación de borrado
+        RETURN NULL;
     END IF;
-    RETURN OLD; -- Permite el borrado si no es un cliente
+    RETURN OLD;
 END;
 $$;
 
@@ -204,7 +201,7 @@ CREATE OR REPLACE FUNCTION func_prevenir_borrado_fisico_medicamento()
 RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER AS $$
 BEGIN
     RAISE NOTICE 'El borrado físico de medicamentos (ID: %) está prevenido. Actualice su estado a "discontinuado" en su lugar.', OLD.id;
-    RETURN NULL; -- Cancela la operación de borrado
+    RETURN NULL;
 END;
 $$;
 
@@ -228,10 +225,7 @@ BEGIN
 END;
 $$;
 
-
--- ** SECCIÓN 6: CREACIÓN DE DISPARADORES (TRIGGERS) **
-
--- Triggers de Auditoría
+-- ** SECCIÓN 6: DISPARADORES (TRIGGERS) **
 CREATE TRIGGER trg_usuarios_auditoria
 AFTER INSERT OR UPDATE OR DELETE ON usuarios
 FOR EACH ROW EXECUTE FUNCTION func_disparador_auditoria_generico();
@@ -244,7 +238,6 @@ CREATE TRIGGER trg_alertas_auditoria
 AFTER INSERT OR UPDATE OR DELETE ON alertas
 FOR EACH ROW EXECUTE FUNCTION func_disparador_auditoria_generico();
 
--- Triggers de Lógica de Negocio (Prevención y Cascada)
 CREATE TRIGGER trg_usuarios_prevenir_delete_cliente
 BEFORE DELETE ON usuarios
 FOR EACH ROW EXECUTE FUNCTION func_prevenir_borrado_fisico_cliente();
