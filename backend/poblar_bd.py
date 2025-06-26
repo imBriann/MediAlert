@@ -7,11 +7,11 @@ from datetime import timedelta  # <-- Agrega este import
 # Cargar variables de entorno
 load_dotenv()
 
-PG_HOST = os.getenv('PG_HOST', 'localhost')
-PG_DB = os.getenv('PG_DB', 'MediAlert')
-PG_USER = os.getenv('PG_USER', 'postgres')
-PG_PASS = os.getenv('PG_PASS', '0102')
-PG_PORT = os.getenv('PG_PORT', '5432')
+PG_HOST = os.getenv('PG_HOST')
+PG_DB = os.getenv('PG_DB')
+PG_USER = os.getenv('PG_USER')
+PG_PASS = os.getenv('PG_PASS')
+PG_PORT = os.getenv('PG_PORT')
 
 # Datos EPS
 eps_data = [
