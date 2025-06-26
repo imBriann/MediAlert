@@ -7,11 +7,11 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # --- Configuración de Conexión a la Base de Datos ---
-PG_HOST = os.getenv('PG_HOST', 'localhost')
-PG_DB = os.getenv('PG_DB', 'medialert')
-PG_USER = os.getenv('PG_USER', 'postgres')
-PG_PASS = os.getenv('PG_PASS', '0102')
-PG_PORT = os.getenv('PG_PORT', '5432')
+PG_HOST = os.getenv('PG_HOST')
+PG_DB = os.getenv('PG_DB')
+PG_USER = os.getenv('PG_USER')
+PG_PASS = os.getenv('PG_PASS')
+PG_PORT = os.getenv('PG_PORT')
 
 # --- Configuración de Flask ---
 SECRET_KEY = os.getenv('FLASK_SECRET_KEY', 'super_secret_key_dev_only') # Use a strong key in production

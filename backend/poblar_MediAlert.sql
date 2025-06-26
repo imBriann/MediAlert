@@ -78,46 +78,46 @@ ON CONFLICT (nombre) DO NOTHING;
 
 -- Usuario Administrador
 INSERT INTO usuarios (nombre, cedula, email, contrasena, rol, estado_usuario, fecha_nacimiento, telefono, ciudad, eps_id, tipo_regimen, genero) VALUES
-('Brian Acevedo', '1092526700', 'admin@medialert.co', 'pbkdf2:sha256:600000$tA2sD4fG8hJ1$a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6', 'admin', 'activo', '1990-04-16', '3101234567', 'Cúcuta', 1, 'Contributivo', 'Masculino')
+('Brian Acevedo', '1092526700', 'admin@medialert.co', 'a0416g', 'admin', 'activo', '1990-04-16', '3101234567', 'Cúcuta', 1, 'Contributivo', 'Masculino')
 ON CONFLICT (cedula) DO NOTHING;
 
 -- Usuarios de la lista "Oracle"
 INSERT INTO usuarios (nombre, cedula, email, contrasena, rol, estado_usuario, fecha_nacimiento, telefono, ciudad, eps_id, tipo_regimen, genero) VALUES
-('Einer Alvear', '1092526701', 'eineralvear77@gmail.com', 'pbkdf2:sha256:600000$zR1hJg8qK9bN$c6d02f1a56e074a3f1694fe6f2432d56d119a0a1613945b637955b20f01a03a4', 'cliente', 'activo', '1992-05-21', '3118765432', 'Bogotá D.C.', 2, 'Contributivo', 'Masculino'),
-('Brayan Amado', '1092526702', 'brayanamadoitg7c@gmail.com', 'pbkdf2:sha256:600000$zR1hJg8qK9bN$c6d02f1a56e074a3f1694fe6f2432d56d119a0a1613945b637955b20f01a03a4', 'cliente', 'activo', '1995-03-15', '3123456789', 'Medellín', 3, 'Subsidiado', 'Masculino'),
-('Juse Carrillo', '1092526703', 'jusecare015@gmail.com', 'pbkdf2:sha256:600000$zR1hJg8qK9bN$c6d02f1a56e074a3f1694fe6f2432d56d119a0a1613945b637955b20f01a03a4', 'cliente', 'activo', '1988-11-30', '3145678901', 'Cali', 4, 'Contributivo', 'Masculino'),
-('Carlos Escamilla', '1092526704', 'carlosescamilla2023@gmail.com', 'pbkdf2:sha256:600000$zR1hJg8qK9bN$c6d02f1a56e074a3f1694fe6f2432d56d119a0a1613945b637955b20f01a03a4', 'cliente', 'inactivo', '2000-01-01', '3156789012', 'Barranquilla', 5, 'Contributivo', 'Masculino'),
-('Xiomara Fajardo', '1092526705', 'xiomystefanny27@gmail.com', 'pbkdf2:sha256:600000$zR1hJg8qK9bN$c6d02f1a56e074a3f1694fe6f2432d56d119a0a1613945b637955b20f01a03a4', 'cliente', 'activo', '1999-07-07', '3167890123', 'Cartagena', 6, 'Especial', 'Femenino'),
-('Yarly Guerrero', '1092526706', 'yarlyguerrero17@gmail.com', 'pbkdf2:sha256:600000$zR1hJg8qK9bN$c6d02f1a56e074a3f1694fe6f2432d56d119a0a1613945b637955b20f01a03a4', 'cliente', 'activo', '1998-02-14', '3178901234', 'Bucaramanga', 7, 'Contributivo', 'Femenino'),
-('Jersain Hernández', '1092526707', 'jersahercal1904@gmail.com', 'pbkdf2:sha256:600000$zR1hJg8qK9bN$c6d02f1a56e074a3f1694fe6f2432d56d119a0a1613945b637955b20f01a03a4', 'cliente', 'activo', '1991-04-19', '3189012345', 'Pereira', 8, 'Subsidiado', 'Masculino'),
-('Kevin Marquez', '1092526708', 'marquezkevin467@gmail.com', 'pbkdf2:sha256:600000$zR1hJg8qK9bN$c6d02f1a56e074a3f1694fe6f2432d56d119a0a1613945b637955b20f01a03a4', 'cliente', 'activo', '1996-10-25', '3190123456', 'Bogotá D.C.', 1, 'Contributivo', 'Masculino'),
-('Juan Ochoa', '1092526709', 'juancamiloochoajaimes1@gmail.com', 'pbkdf2:sha256:600000$zR1hJg8qK9bN$c6d02f1a56e074a3f1694fe6f2432d56d119a0a1613945b637955b20f01a03a4', 'cliente', 'activo', '1993-06-12', '3201234567', 'Medellín', 2, 'Contributivo', 'Masculino'),
-('Julian Pulido', '1092526710', 'pulidojulian00@gmail.com', 'pbkdf2:sha256:600000$zR1hJg8qK9bN$c6d02f1a56e074a3f1694fe6f2432d56d119a0a1613945b637955b20f01a03a4', 'cliente', 'activo', '1990-09-01', '3212345678', 'Cali', 3, 'Especial', 'Masculino'),
-('Daniel Rodriguez', '1092526711', 'dfra0512@outlook.com', 'pbkdf2:sha256:600000$zR1hJg8qK9bN$c6d02f1a56e074a3f1694fe6f2432d56d119a0a1613945b637955b20f01a03a4', 'cliente', 'activo', '1987-12-05', '3223456789', 'Barranquilla', 4, 'Subsidiado', 'Masculino'),
-('Carlos Rojas', '1092526712', 'carlosrojascubides10a@gmail.com', 'pbkdf2:sha256:600000$zR1hJg8qK9bN$c6d02f1a56e074a3f1694fe6f2432d56d119a0a1613945b637955b20f01a03a4', 'cliente', 'activo', '1994-07-20', '3234567890', 'Cartagena', 5, 'Contributivo', 'Masculino'),
-('Kevin Rojas', '1092526713', 'sauremk30@gmail.com', 'pbkdf2:sha256:600000$zR1hJg8qK9bN$c6d02f1a56e074a3f1694fe6f2432d56d119a0a1613945b637955b20f01a03a4', 'cliente', 'activo', '1999-11-11', '3005678901', 'Bucaramanga', 6, 'Contributivo', 'Masculino'),
-('Jorge Rolon', '1092526714', 'jorgesebastianrolonmarquez@gmail.com', 'pbkdf2:sha256:600000$zR1hJg8qK9bN$c6d02f1a56e074a3f1694fe6f2432d56d119a0a1613945b637955b20f01a03a4', 'cliente', 'activo', '1997-08-18', '3016789012', 'Cúcuta', 7, 'Especial', 'Masculino'),
-('Sofia Velandia', '1092526715', 'sovelandiap2005@gmail.com', 'pbkdf2:sha256:600000$zR1hJg8qK9bN$c6d02f1a56e074a3f1694fe6f2432d56d119a0a1613945b637955b20f01a03a4', 'cliente', 'activo', '2005-01-20', '3027890123', 'Pereira', 8, 'Subsidiado', 'Femenino'),
-('Osmar Vera', '1092526716', 'osmarandresvera@gmail.com', 'pbkdf2:sha256:600000$zR1hJg8qK9bN$c6d02f1a56e074a3f1694fe6f2432d56d119a0a1613945b637955b20f01a03a4', 'cliente', 'inactivo', '1985-05-25', '3038901234', 'Bogotá D.C.', 1, 'Contributivo', 'Masculino'),
-('Geronimo Vergara', '1092526717', 'geronjose20@gmail.com', 'pbkdf2:sha256:600000$zR1hJg8qK9bN$c6d02f1a56e074a3f1694fe6f2432d56d119a0a1613945b637955b20f01a03a4', 'cliente', 'activo', '1992-02-28', '3049012345', 'Medellín', 2, 'Contributivo', 'Masculino'),
-('Daniel Villamizar', '1092526718', 'dani3lsu4rez@gmail.com', 'pbkdf2:sha256:600000$zR1hJg8qK9bN$c6d02f1a56e074a3f1694fe6f2432d56d119a0a1613945b637955b20f01a03a4', 'cliente', 'activo', '1998-03-03', '3050123456', 'Cali', 3, 'Subsidiado', 'Masculino')
+('Einer Alvear', '1092526701', 'eineralvear77@gmail.com', '1234', 'cliente', 'activo', '1992-05-21', '3118765432', 'Bogotá D.C.', 2, 'Contributivo', 'Masculino'),
+('Brayan Amado', '1092526702', 'brayanamadoitg7c@gmail.com', '1234', 'cliente', 'activo', '1995-03-15', '3123456789', 'Medellín', 3, 'Subsidiado', 'Masculino'),
+('Juse Carrillo', '1092526703', 'jusecare015@gmail.com', '1234', 'cliente', 'activo', '1988-11-30', '3145678901', 'Cali', 4, 'Contributivo', 'Masculino'),
+('Carlos Escamilla', '1092526704', 'carlosescamilla2023@gmail.com', '1234', 'cliente', 'inactivo', '2000-01-01', '3156789012', 'Barranquilla', 5, 'Contributivo', 'Masculino'),
+('Xiomara Fajardo', '1092526705', 'xiomystefanny27@gmail.com', '1234', 'cliente', 'activo', '1999-07-07', '3167890123', 'Cartagena', 6, 'Especial', 'Femenino'),
+('Yarly Guerrero', '1092526706', 'yarlyguerrero17@gmail.com', '1234', 'cliente', 'activo', '1998-02-14', '3178901234', 'Bucaramanga', 7, 'Contributivo', 'Femenino'),
+('Jersain Hernández', '1092526707', 'jersahercal1904@gmail.com', '1234', 'cliente', 'activo', '1991-04-19', '3189012345', 'Pereira', 8, 'Subsidiado', 'Masculino'),
+('Kevin Marquez', '1092526708', 'marquezkevin467@gmail.com', '1234', 'cliente', 'activo', '1996-10-25', '3190123456', 'Bogotá D.C.', 1, 'Contributivo', 'Masculino'),
+('Juan Ochoa', '1092526709', 'juancamiloochoajaimes1@gmail.com', '1234', 'cliente', 'activo', '1993-06-12', '3201234567', 'Medellín', 2, 'Contributivo', 'Masculino'),
+('Julian Pulido', '1092526710', 'pulidojulian00@gmail.com', '1234', 'cliente', 'activo', '1990-09-01', '3212345678', 'Cali', 3, 'Especial', 'Masculino'),
+('Daniel Rodriguez', '1092526711', 'dfra0512@outlook.com', '1234', 'cliente', 'activo', '1987-12-05', '3223456789', 'Barranquilla', 4, 'Subsidiado', 'Masculino'),
+('Carlos Rojas', '1092526712', 'carlosrojascubides10a@gmail.com', '1234', 'cliente', 'activo', '1994-07-20', '3234567890', 'Cartagena', 5, 'Contributivo', 'Masculino'),
+('Kevin Rojas', '1092526713', 'sauremk30@gmail.com', '1234', 'cliente', 'activo', '1999-11-11', '3005678901', 'Bucaramanga', 6, 'Contributivo', 'Masculino'),
+('Jorge Rolon', '1092526714', 'jorgesebastianrolonmarquez@gmail.com', '1234', 'cliente', 'activo', '1997-08-18', '3016789012', 'Cúcuta', 7, 'Especial', 'Masculino'),
+('Sofia Velandia', '1092526715', 'sovelandiap2005@gmail.com', '1234', 'cliente', 'activo', '2005-01-20', '3027890123', 'Pereira', 8, 'Subsidiado', 'Femenino'),
+('Osmar Vera', '1092526716', 'osmarandresvera@gmail.com', '1234', 'cliente', 'inactivo', '1985-05-25', '3038901234', 'Bogotá D.C.', 1, 'Contributivo', 'Masculino'),
+('Geronimo Vergara', '1092526717', 'geronjose20@gmail.com', '1234', 'cliente', 'activo', '1992-02-28', '3049012345', 'Medellín', 2, 'Contributivo', 'Masculino'),
+('Daniel Villamizar', '1092526718', 'dani3lsu4rez@gmail.com', '1234', 'cliente', 'activo', '1998-03-03', '3050123456', 'Cali', 3, 'Subsidiado', 'Masculino')
 ON CONFLICT (cedula) DO NOTHING;
 
 -- 100+ Usuarios Aleatorios Adicionales
 INSERT INTO usuarios (nombre, cedula, email, contrasena, rol, estado_usuario, fecha_nacimiento, telefono, ciudad, eps_id, tipo_regimen, genero) VALUES
-('Laura Gómez', '10100101', 'laura.gomez@example.com', 'pbkdf2:sha256:600000$zR1hJg8qK9bN$c6d02f1a56e074a3f1694fe6f2432d56d119a0a1613945b637955b20f01a03a4', 'cliente', 'activo', '1991-08-10', '3102345678', 'Bogotá D.C.', 1, 'Contributivo', 'Femenino'),
-('Carlos Rodríguez', '10100102', 'carlos.rodriguez@example.com', 'pbkdf2:sha256:600000$zR1hJg8qK9bN$c6d02f1a56e074a3f1694fe6f2432d56d119a0a1613945b637955b20f01a03a4', 'cliente', 'activo', '1985-04-25', '3113456789', 'Medellín', 2, 'Subsidiado', 'Masculino'),
-('Ana Martínez', '10100103', 'ana.martinez@example.com', 'pbkdf2:sha256:600000$zR1hJg8qK9bN$c6d02f1a56e074a3f1694fe6f2432d56d119a0a1613945b637955b20f01a03a4', 'cliente', 'activo', '1993-02-18', '3124567890', 'Cali', 3, 'Contributivo', 'Femenino'),
-('Jorge Hernández', '10100104', 'jorge.hernandez@example.com', 'pbkdf2:sha256:600000$zR1hJg8qK9bN$c6d02f1a56e074a3f1694fe6f2432d56d119a0a1613945b637955b20f01a03a4', 'cliente', 'activo', '1978-12-01', '3135678901', 'Barranquilla', 4, 'Especial', 'Masculino'),
-('Sofía Pérez', '10100105', 'sofia.perez@example.com', 'pbkdf2:sha256:600000$zR1hJg8qK9bN$c6d02f1a56e074a3f1694fe6f2432d56d119a0a1613945b637955b20f01a03a4', 'cliente', 'inactivo', '2001-06-30', '3146789012', 'Cartagena', 5, 'Subsidiado', 'Femenino'),
-('Luis Díaz', '10100106', 'luis.diaz@example.com', 'pbkdf2:sha256:600000$zR1hJg8qK9bN$c6d02f1a56e074a3f1694fe6f2432d56d119a0a1613945b637955b20f01a03a4', 'cliente', 'activo', '1998-09-14', '3157890123', 'Bucaramanga', 6, 'Contributivo', 'Masculino'),
-('Valentina Torres', '10100107', 'valentina.torres@example.com', 'pbkdf2:sha256:600000$zR1hJg8qK9bN$c6d02f1a56e074a3f1694fe6f2432d56d119a0a1613945b637955b20f01a03a4', 'cliente', 'activo', '1990-07-22', '3168901234', 'Cúcuta', 7, 'Contributivo', 'Femenino'),
-('Andrés Ramírez', '10100108', 'andres.ramirez@example.com', 'pbkdf2:sha256:600000$zR1hJg8qK9bN$c6d02f1a56e074a3f1694fe6f2432d56d119a0a1613945b637955b20f01a03a4', 'cliente', 'activo', '1995-01-05', '3179012345', 'Pereira', 8, 'Subsidiado', 'Masculino'),
-('Camila Vargas', '10100109', 'camila.vargas@example.com', 'pbkdf2:sha256:600000$zR1hJg8qK9bN$c6d02f1a56e074a3f1694fe6f2432d56d119a0a1613945b637955b20f01a03a4', 'cliente', 'activo', '1989-10-12', '3180123456', 'Bogotá D.C.', 1, 'Contributivo', 'Femenino'),
-('Diego Moreno', '10100110', 'diego.moreno@example.com', 'pbkdf2:sha256:600000$zR1hJg8qK9bN$c6d02f1a56e074a3f1694fe6f2432d56d119a0a1613945b637955b20f01a03a4', 'cliente', 'activo', '1992-11-20', '3191234567', 'Medellín', 2, 'Contributivo', 'Masculino'),
-('Isabella Jiménez', '10100111', 'isabella.jimenez@example.com', 'pbkdf2:sha256:600000$zR1hJg8qK9bN$c6d02f1a56e074a3f1694fe6f2432d56d119a0a1613945b637955b20f01a03a4', 'cliente', 'activo', '1997-03-03', '3202345678', 'Cali', 3, 'Especial', 'Femenino'),
-('Juan Ruiz', '10100112', 'juan.ruiz@example.com', 'pbkdf2:sha256:600000$zR1hJg8qK9bN$c6d02f1a56e074a3f1694fe6f2432d56d119a0a1613945b637955b20f01a03a4', 'cliente', 'activo', '1980-05-19', '3213456789', 'Barranquilla', 4, 'Contributivo', 'Masculino'),
-('María Suárez', '10100113', 'maria.suarez@example.com', 'pbkdf2:sha256:600000$zR1hJg8qK9bN$c6d02f1a56e074a3f1694fe6f2432d56d119a0a1613945b637955b20f01a03a4', 'cliente', 'inactivo', '1999-08-28', '3224567890', 'Cartagena', 5, 'Subsidiado', 'Femenino')
+('Laura Gómez', '10100101', 'laura.gomez@example.com', '1234', 'cliente', 'activo', '1991-08-10', '3102345678', 'Bogotá D.C.', 1, 'Contributivo', 'Femenino'),
+('Carlos Rodríguez', '10100102', 'carlos.rodriguez@example.com', '1234', 'cliente', 'activo', '1985-04-25', '3113456789', 'Medellín', 2, 'Subsidiado', 'Masculino'),
+('Ana Martínez', '10100103', 'ana.martinez@example.com', '1234', 'cliente', 'activo', '1993-02-18', '3124567890', 'Cali', 3, 'Contributivo', 'Femenino'),
+('Jorge Hernández', '10100104', 'jorge.hernandez@example.com', '1234', 'cliente', 'activo', '1978-12-01', '3135678901', 'Barranquilla', 4, 'Especial', 'Masculino'),
+('Sofía Pérez', '10100105', 'sofia.perez@example.com', '1234', 'cliente', 'inactivo', '2001-06-30', '3146789012', 'Cartagena', 5, 'Subsidiado', 'Femenino'),
+('Luis Díaz', '10100106', 'luis.diaz@example.com', '1234', 'cliente', 'activo', '1998-09-14', '3157890123', 'Bucaramanga', 6, 'Contributivo', 'Masculino'),
+('Valentina Torres', '10100107', 'valentina.torres@example.com', '1234', 'cliente', 'activo', '1990-07-22', '3168901234', 'Cúcuta', 7, 'Contributivo', 'Femenino'),
+('Andrés Ramírez', '10100108', 'andres.ramirez@example.com', '1234', 'cliente', 'activo', '1995-01-05', '3179012345', 'Pereira', 8, 'Subsidiado', 'Masculino'),
+('Camila Vargas', '10100109', 'camila.vargas@example.com', '1234', 'cliente', 'activo', '1989-10-12', '3180123456', 'Bogotá D.C.', 1, 'Contributivo', 'Femenino'),
+('Diego Moreno', '10100110', 'diego.moreno@example.com', '1234', 'cliente', 'activo', '1992-11-20', '3191234567', 'Medellín', 2, 'Contributivo', 'Masculino'),
+('Isabella Jiménez', '10100111', 'isabella.jimenez@example.com', '1234', 'cliente', 'activo', '1997-03-03', '3202345678', 'Cali', 3, 'Especial', 'Femenino'),
+('Juan Ruiz', '10100112', 'juan.ruiz@example.com', '1234', 'cliente', 'activo', '1980-05-19', '3213456789', 'Barranquilla', 4, 'Contributivo', 'Masculino'),
+('María Suárez', '10100113', 'maria.suarez@example.com', '1234', 'cliente', 'inactivo', '1999-08-28', '3224567890', 'Cartagena', 5, 'Subsidiado', 'Femenino')
 ON CONFLICT (cedula) DO NOTHING;
 
 
