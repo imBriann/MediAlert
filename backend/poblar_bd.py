@@ -2,7 +2,7 @@ import os
 import psycopg2
 from dotenv import load_dotenv
 from werkzeug.security import generate_password_hash
-from datetime import timedelta  # <-- Agrega este import
+from datetime import timedelta
 
 # Cargar variables de entorno
 load_dotenv()
