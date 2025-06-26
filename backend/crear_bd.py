@@ -1,4 +1,3 @@
-# backend/init_db.py
 import os
 import psycopg2
 from dotenv import load_dotenv
@@ -15,7 +14,6 @@ PG_PORT = os.getenv('PG_PORT', '5432')
 
 # --- Rutas a los archivos SQL ---
 SCHEMA_SCRIPT_PATH = os.path.join(os.path.dirname(__file__), 'script_MediAlert.sql')
-POPULATE_SCRIPT_PATH = os.path.join(os.path.dirname(__file__), 'poblar_MediAlert.sql')
 
 
 def get_db_connection():
@@ -90,7 +88,6 @@ def main():
     try:
         conn = get_db_connection()
         execute_sql_from_file(conn, SCHEMA_SCRIPT_PATH)
-        execute_sql_from_file(conn, POPULATE_SCRIPT_PATH)
         print("\n🎉 ¡Proceso de inicialización de la base de datos completado exitosamente!")
     except Exception as e:
         print(f"\n🔥 El proceso de inicialización falló. Error: {e!r}")
