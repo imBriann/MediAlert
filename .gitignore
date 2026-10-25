@@ -1,0 +1,8 @@
+# Variables de entorno (credenciales locales)
+.env
+*.env
+!.env.example
+
+# Python
+__pycache__/
+*.pyc
